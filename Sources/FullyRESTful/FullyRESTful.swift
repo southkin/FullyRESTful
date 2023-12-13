@@ -77,15 +77,15 @@ public enum ParameterEncode {
     }
 }
 public struct ServerInfo {
-    enum AfterResolve {
+    public enum AfterResolve {
         case retry
         case throwError
         case success
     }
-    typealias StatusCodeValid = (Int) -> (AfterResolve)
-    var domain:String
-    var statusCodeValid:StatusCodeValid?
-    var defaultHeader:[String:String]
+    public typealias StatusCodeValid = (Int) -> (AfterResolve)
+    public var domain:String
+    public var statusCodeValid:StatusCodeValid?
+    public var defaultHeader:[String:String]
 }
 public protocol APIITEM_BASE {
     var method:HTTPMethod {get}
