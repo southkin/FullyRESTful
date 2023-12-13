@@ -41,8 +41,6 @@ extension Encodable {
         try JSONEncoder().encode(self)
     }
 }
-public protocol APIItem {
-}
 public protocol MultipartUpload {
 }
 public struct MultipartItem : Codable {
@@ -96,7 +94,7 @@ public protocol APIITEM_BASE {
     var method:HTTPMethod {get}
     var server:ServerInfo {get}
     var path:String {get}
-    var header:[String:String]? {get}
+    var header:[String:String] {get}
     var paramEncoder:ParameterEncode {get}
     var strEncoder:String.Encoding {get}
 }
@@ -144,21 +142,19 @@ extension APIITEM {
                 request.setValue(value, forHTTPHeaderField: key)
             }
             request.httpBody = try paramEncoder.encoding(param: param)
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw URLError(.badServerResponse)
-            }
-            switch self.statusCodeValid(httpResponse.statusCode) {
-            case .success:
-                return try JSONDecoder().decode(ResponseModel.self, from: data)
-            case .retry:
-                return try await self.request(param:param)
-            case .throwError:
-                throw NSError()
-            }
         }
-        return nil
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        switch self.statusCodeValid(httpResponse.statusCode) {
+        case .success:
+            return try JSONDecoder().decode(ResponseModel.self, from: data)
+        case .retry:
+            return try await self.request(param:param)
+        case .throwError:
+            throw NSError()
+        }
     }
 }
 
