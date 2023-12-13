@@ -86,6 +86,11 @@ public struct ServerInfo {
     public var domain:String
     public var statusCodeValid:StatusCodeValid?
     public var defaultHeader:[String:String]
+    public init(domain: String, statusCodeValid: StatusCodeValid? = nil, defaultHeader: [String: String]) {
+        self.domain = domain
+        self.statusCodeValid = statusCodeValid
+        self.defaultHeader = defaultHeader
+    }
 }
 public protocol APIITEM_BASE {
     var method:HTTPMethod {get}
