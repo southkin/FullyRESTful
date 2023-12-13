@@ -100,7 +100,7 @@ public protocol APIITEM_BASE {
     var paramEncoder:ParameterEncode {get}
     var strEncoder:String.Encoding {get}
 }
-extension APIITEM_BASE {
+public extension APIITEM_BASE {
     var header:[String:String] {
         self.server.defaultHeader
     }
