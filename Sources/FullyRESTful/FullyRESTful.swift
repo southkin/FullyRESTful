@@ -1,6 +1,28 @@
 // The Swift Programming Language
 // https://docs.swift.org/swift-book
 import Foundation
+extension URLRequest {
+    var curlString: String {
+        guard let url = self.url else { return "" }
+        var baseCommand = "curl \(url.absoluteString)"
+        if self.httpMethod == "HEAD" {
+            baseCommand += " --head"
+        }
+        var command = [baseCommand]
+        if let method = self.httpMethod, method != "GET" && method != "HEAD" {
+            command.append("-X \(method)")
+        }
+        if let headers = self.allHTTPHeaderFields {
+            for (header, value) in headers where header != "Content-Type" {
+                command.append("-H \"\(header): \(value)\"")
+            }
+        }
+        if let bodyData = self.httpBody, let bodyString = String(data: bodyData, encoding: .utf8) {
+            command.append("-d '\(bodyString)'")
+        }
+        return command.joined(separator: " ")
+    }
+}
 extension Dictionary {
     var queryString:String {
         return self.map { (key, value) in
@@ -48,7 +70,7 @@ public struct MultipartItem : Codable {
     var mimeType:String
     var fileName:String
 }
-public enum HTTPMethod:String {
+public enum HTTPMethod:String, CaseIterable {
     case CONNECT
     case DELETE
     case GET
@@ -97,6 +119,7 @@ public protocol APIITEM_BASE {
     var header:[String:String] {get}
     var paramEncoder:ParameterEncode {get}
     var strEncoder:String.Encoding {get}
+    var curlLog:Bool {get set}
 }
 public extension APIITEM_BASE {
     var header:[String:String] {
@@ -115,6 +138,13 @@ public extension APIITEM_BASE {
     }
     var strEncoder:String.Encoding {
         .utf8
+    }
+    var curlLog:Bool {
+        false
+    }
+    mutating func debug(_ log:Bool) -> Self {
+        curlLog = log
+        return self
     }
 }
 public protocol APIITEM : APIITEM_BASE {
@@ -142,6 +172,9 @@ extension APIITEM {
                 request.setValue(value, forHTTPHeaderField: key)
             }
             request.httpBody = try paramEncoder.encoding(param: param)
+        }
+        if curlLog {
+            print(request.curlString)
         }
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
