@@ -69,6 +69,11 @@ public struct MultipartItem : Codable {
     var data:Data
     var mimeType:String
     var fileName:String
+    public init(data: Data, mimeType: String, fileName: String) {
+        self.data = data
+        self.mimeType = mimeType
+        self.fileName = fileName
+    }
 }
 public enum HTTPMethod:String, CaseIterable {
     case CONNECT
@@ -139,7 +144,7 @@ public extension APIITEM_BASE {
     var strEncoder:String.Encoding {
         .utf8
     }
-    public var curlLog:Bool {
+    var curlLog:Bool {
         false
     }
 }
