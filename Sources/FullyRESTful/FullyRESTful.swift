@@ -124,7 +124,7 @@ public protocol APIITEM : APIITEM_BASE {
     var requestModel:RequestModel.Type {get}
 }
 extension APIITEM {
-    public func request(param:RequestModel) async throws -> ResponseModel? {
+    public func getData(param:RequestModel) async throws -> Data? {
         let url = URL(string: "\(server.domain)\(path)")!
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
@@ -149,12 +149,16 @@ extension APIITEM {
         }
         switch self.statusCodeValid(httpResponse.statusCode) {
         case .success:
-            return try JSONDecoder().decode(ResponseModel.self, from: data)
+            return data
         case .retry:
-            return try await self.request(param:param)
+            return try await self.getData(param:param)
         case .throwError:
             throw NSError()
         }
+    }
+    public func request(param:RequestModel) async throws -> ResponseModel? {
+        guard let data = try await getData(param: param) else {return nil}
+        return try JSONDecoder().decode(ResponseModel.self, from: data)
     }
 }
 
