@@ -119,7 +119,7 @@ public protocol APIITEM_BASE {
     var header:[String:String] {get}
     var paramEncoder:ParameterEncode {get}
     var strEncoder:String.Encoding {get}
-    var curlLog:Bool {get set}
+    var curlLog:Bool {get}
 }
 public extension APIITEM_BASE {
     var header:[String:String] {
@@ -142,10 +142,6 @@ public extension APIITEM_BASE {
     public var curlLog:Bool {
         false
     }
-//    public mutating func debug(_ log:Bool) -> Self {
-//        curlLog = log
-//        return self
-//    }
 }
 public protocol APIITEM : APIITEM_BASE {
     associatedtype ResponseModel : Decodable
