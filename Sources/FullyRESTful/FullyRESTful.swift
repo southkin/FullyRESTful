@@ -139,13 +139,13 @@ public extension APIITEM_BASE {
     var strEncoder:String.Encoding {
         .utf8
     }
-    var curlLog:Bool {
+    public var curlLog:Bool {
         false
     }
-    mutating func debug(_ log:Bool) -> Self {
-        curlLog = log
-        return self
-    }
+//    public mutating func debug(_ log:Bool) -> Self {
+//        curlLog = log
+//        return self
+//    }
 }
 public protocol APIITEM : APIITEM_BASE {
     associatedtype ResponseModel : Decodable
@@ -171,7 +171,9 @@ extension APIITEM {
             for (key, value) in header {
                 request.setValue(value, forHTTPHeaderField: key)
             }
-            request.httpBody = try paramEncoder.encoding(param: param)
+            if ![HTTPMethod.GET, HTTPMethod.HEAD].contains(method) {
+                request.httpBody = try paramEncoder.encoding(param: param)
+            }
         }
         if curlLog {
             print(request.curlString)
