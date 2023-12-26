@@ -1,6 +1,29 @@
 // The Swift Programming Language
 // https://docs.swift.org/swift-book
 import Foundation
+extension URLSession {
+    func getData(for request: URLRequest) async throws -> (Data, URLResponse) {
+        if #available(iOS 15, *) {
+            return try await data(for: request)
+        } else {
+            return try await withCheckedThrowingContinuation { continuation in
+                let task = self.dataTask(with: request) { data, response, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    if let data = data, let response = response {
+                        continuation.resume(returning: (data, response))
+                    } else {
+                        continuation.resume(throwing: URLError(.badServerResponse))
+                    }
+                }
+                task.resume()
+            }
+        }
+    }
+}
+
 extension URLRequest {
     var curlString: String {
         guard let url = self.url else { return "" }
@@ -179,7 +202,7 @@ extension APIITEM {
         if curlLog {
             print(request.curlString)
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.getData(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)
         }
