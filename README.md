@@ -87,4 +87,5 @@ struct myAPI:APIITEM {
     //... 기존 설정정보
     var curlLog: Bool = true
 }
+
 ```

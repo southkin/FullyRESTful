@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "FullyRESTful",
     platforms: [
-        .iOS(.v15),
+        .iOS(.v13),
         .macOS(.v12),
         .driverKit(.v19)
     ],
