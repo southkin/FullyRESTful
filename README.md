@@ -16,7 +16,7 @@ Swift로 구현된 HTTP 네트워킹 라이브러리
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/[username]/[repository].git", .upToNextMajor(from: "1.0.0"))
+    .package(url: "https://github.com/southkin/FullyRESTfu.git", .upToNextMajor(from: "1.0.0"))
 ]
 ```
 ## 사용 방법
