@@ -303,3 +303,124 @@ extension Data {
         }
     }
 }
+
+public protocol WebSocketAPIITEM_BASE {
+    var server: ServerInfo { get }
+    var path: String { get }
+    var header: [String: String] { get }
+    var requestEncoder: ParameterEncode { get }
+    var responseDecoder: JSONDecoder { get }
+}
+
+public extension WebSocketAPIITEM_BASE {
+    var header: [String: String] {
+        self.server.defaultHeader
+    }
+    var requestEncoder: ParameterEncode {
+        .JSONEncode
+    }
+    var responseDecoder: JSONDecoder {
+        JSONDecoder()
+    }
+}
+
+public protocol WebSocketAPIITEM: WebSocketAPIITEM_BASE {
+    associatedtype RequestModel: Encodable
+    associatedtype ResponseModel: Decodable
+    var requestModel: RequestModel.Type { get }
+    var responseModel: ResponseModel.Type { get }
+}
+
+class WebSocketManager<API: WebSocketAPIITEM>: NSObject, URLSessionWebSocketDelegate {
+    private var webSocketTask: URLSessionWebSocketTask?
+    private var urlSession: URLSession!
+    private var api: API
+    
+    private var isConnected: Bool = false
+    private var receiveContinuation: CheckedContinuation<API.ResponseModel, Error>?
+    
+    init(api: API) {
+        self.api = api
+        super.init()
+        let configuration = URLSessionConfiguration.default
+        configuration.httpAdditionalHeaders = api.header
+        self.urlSession = URLSession(configuration: configuration, delegate: self, delegateQueue: OperationQueue())
+    }
+    
+    func connect() {
+        guard let url = URL(string: "\(api.server.domain)\(api.path)") else {
+            print("Invalid URL")
+            return
+        }
+        let request = URLRequest(url: url)
+        webSocketTask = urlSession.webSocketTask(with: request)
+        webSocketTask?.resume()
+        isConnected = true
+        listen()
+    }
+    
+    func disconnect() {
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        isConnected = false
+    }
+    
+    func send(_ message: API.RequestModel) async throws {
+        let data = try api.requestEncoder.encoding(param: message)
+        let jsonString = String(data: data, encoding: .utf8) ?? ""
+        let wsMessage = URLSessionWebSocketTask.Message.string(jsonString)
+        try await webSocketTask?.send(wsMessage)
+    }
+    
+    func receive() async throws -> API.ResponseModel {
+        return try await withCheckedThrowingContinuation { continuation in
+            receiveContinuation = continuation
+        }
+    }
+    
+    private func listen() {
+        webSocketTask?.receive { [weak self] result in
+            guard let self = self else { return }
+            switch result {
+            case .failure(let error):
+                self.receiveContinuation?.resume(throwing: error)
+            case .success(let message):
+                switch message {
+                case .string(let text):
+                    if let data = text.data(using: .utf8) {
+                        do {
+                            let response = try self.api.responseDecoder.decode(API.ResponseModel.self, from: data)
+                            self.receiveContinuation?.resume(returning: response)
+                        } catch {
+                            self.receiveContinuation?.resume(throwing: error)
+                        }
+                    } else {
+                        let error = NSError(domain: "WebSocketManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert text to data"])
+                        self.receiveContinuation?.resume(throwing: error)
+                    }
+                case .data(let data):
+                    do {
+                        let response = try self.api.responseDecoder.decode(API.ResponseModel.self, from: data)
+                        self.receiveContinuation?.resume(returning: response)
+                    } catch {
+                        self.receiveContinuation?.resume(throwing: error)
+                    }
+                @unknown default:
+                    break
+                }
+            }
+            if self.isConnected {
+                self.listen()
+            }
+        }
+    }
+    
+    // URLSessionWebSocketDelegate 메서드 구현 (옵션)
+    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+        print("WebSocket connected")
+    }
+    
+    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        print("WebSocket disconnected")
+        isConnected = false
+    }
+}
