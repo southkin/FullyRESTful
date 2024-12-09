@@ -270,7 +270,11 @@ func createMultipartBody(boundary: String, parameters: [String: Encodable]) thro
             body.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n")
             body.append(val)
             body.append("\r\n")
-        case let val as Int, let val as Float, let val as Double:
+        case let val as Int:
+            body.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n")
+            body.append("\(val)")
+            body.append("\r\n")
+        case let val as Double:
             body.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n")
             body.append("\(val)")
             body.append("\r\n")
