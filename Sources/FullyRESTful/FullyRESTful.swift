@@ -1,105 +1,5 @@
 import Foundation
 
-extension URLSession {
-    func getData(for request: URLRequest) async throws -> (Data, URLResponse) {
-        if #available(iOS 15, *) {
-            return try await data(for: request)
-        } else {
-            return try await withCheckedThrowingContinuation { continuation in
-                let task = self.dataTask(with: request) { data, response, error in
-                    if let error = error {
-                        continuation.resume(throwing: error)
-                        return
-                    }
-                    if let data = data, let response = response {
-                        continuation.resume(returning: (data, response))
-                    } else {
-                        let error = URLError(.badServerResponse)
-                        continuation.resume(throwing: error)
-                    }
-                }
-                task.resume()
-            }
-        }
-    }
-}
-
-extension URLRequest {
-    var curlString: String {
-        guard let url = self.url else { return "" }
-        var baseCommand = "curl \(url.absoluteString)"
-        if self.httpMethod == "HEAD" {
-            baseCommand += " --head"
-        }
-        var command = [baseCommand]
-        if let method = self.httpMethod, method != "GET" && method != "HEAD" {
-            command.append("-X \(method)")
-        }
-        if let headers = self.allHTTPHeaderFields {
-            for (header, value) in headers where header != "Content-Type" {
-                let escapedHeader = header.replacingOccurrences(of: "\"", with: "\\\"")
-                let escapedValue = value.replacingOccurrences(of: "\"", with: "\\\"")
-                command.append("-H \"\(escapedHeader): \(escapedValue)\"")
-            }
-        }
-        if let bodyData = self.httpBody, let bodyString = String(data: bodyData, encoding: .utf8) {
-            let escapedBody = bodyString.replacingOccurrences(of: "\"", with: "\\\"")
-            command.append("-d \"\(escapedBody)\"")
-        }
-        return command.joined(separator: " ")
-    }
-}
-
-extension Dictionary {
-    var queryString: String {
-        return self.map { (key, value) in
-            let escapedKey = "\(key)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            let escapedValue = "\(value)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            return "\(escapedKey)=\(escapedValue)"
-        }.joined(separator: "&")
-    }
-}
-
-extension Encodable {
-    var dict: [String: Any]? {
-        guard let data = self.data else { return nil }
-        do {
-            let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
-            return jsonObject as? [String: Any]
-        } catch {
-            print("Failed to convert Encodable to dictionary: \(error)")
-            return nil
-        }
-    }
-    
-    var allProperties: [(String, Encodable?)] {
-        var result = [(String, Encodable?)]()
-        let mirror = Mirror(reflecting: self)
-        guard let style = mirror.displayStyle, style == .struct || style == .class else {
-            return []
-        }
-        for (property, value) in mirror.children {
-            if let p = property {
-                result.append((p, value as? Encodable))
-            }
-        }
-        return result
-    }
-    
-    var JSONString: String? {
-        guard let data = self.data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-    
-    var data: Data? {
-        return try? JSONEncoder().encode(self)
-    }
-    
-    func dataWithThrows() throws -> Data {
-        return try JSONEncoder().encode(self)
-    }
-}
-
 public protocol MultipartUpload {
 }
 
@@ -142,22 +42,7 @@ public enum ParameterEncode {
     }
 }
 
-public struct ServerInfo {
-    public enum AfterResolve {
-        case retry
-        case throwError
-        case success
-    }
-    public typealias StatusCodeValid = (Int) -> AfterResolve
-    public var domain: String
-    public var statusCodeValid: StatusCodeValid?
-    public var defaultHeader: [String: String]
-    public init(domain: String, statusCodeValid: StatusCodeValid? = nil, defaultHeader: [String: String]) {
-        self.domain = domain
-        self.statusCodeValid = statusCodeValid
-        self.defaultHeader = defaultHeader
-    }
-}
+
 
 public protocol APIITEM_BASE {
     var method: HTTPMethod { get }
@@ -168,7 +53,6 @@ public protocol APIITEM_BASE {
     var strEncoder: String.Encoding { get }
     var curlLog: Bool { get }
 }
-
 public extension APIITEM_BASE {
     var header: [String: String] {
         self.server.defaultHeader
@@ -200,7 +84,7 @@ public protocol APIITEM: APIITEM_BASE {
 }
 
 extension APIITEM {
-    public func getData(param: RequestModel) async throws -> Data? {
+    public func getData(param: RequestModel) async throws -> (Data, URLResponse)? {
         guard let url = URL(string: "\(server.domain)\(path)") else {
             throw URLError(.badURL)
         }
@@ -237,7 +121,7 @@ extension APIITEM {
             }
             switch self.statusCodeValid(httpResponse.statusCode) {
             case .success:
-                return data
+                return (data, httpResponse)
             case .retry:
                 retries += 1
                 continue
@@ -250,8 +134,20 @@ extension APIITEM {
     }
     
     public func request(param: RequestModel) async throws -> ResponseModel? {
-        guard let data = try await getData(param: param) else { return nil }
-        return try JSONDecoder().decode(ResponseModel.self, from: data)
+        guard let dataInfo = try await getData(param: param),
+              let response = dataInfo.1 as? HTTPURLResponse,
+              let contentType = response.allHeaderFields["Content-Type"] as? String
+        else { return nil }
+        let data = dataInfo.0
+        
+        
+        if contentType.contains("application/json") {
+            return try JSONDecoder().decode(ResponseModel.self, from: data)
+        } else if contentType.contains("text/plain") {
+            return String(data: data, encoding: .utf8) as? ResponseModel
+        } else {
+            return nil
+        }
     }
 }
 
@@ -308,123 +204,5 @@ extension Data {
     }
 }
 
-public protocol WebSocketAPIITEM_BASE {
-    var server: ServerInfo { get }
-    var path: String { get }
-    var header: [String: String] { get }
-    var requestEncoder: ParameterEncode { get }
-    var responseDecoder: JSONDecoder { get }
-}
 
-public extension WebSocketAPIITEM_BASE {
-    var header: [String: String] {
-        self.server.defaultHeader
-    }
-    var requestEncoder: ParameterEncode {
-        .JSONEncode
-    }
-    var responseDecoder: JSONDecoder {
-        JSONDecoder()
-    }
-}
 
-public protocol WebSocketAPIITEM: WebSocketAPIITEM_BASE {
-    associatedtype RequestModel: Encodable
-    associatedtype ResponseModel: Decodable
-    var requestModel: RequestModel.Type { get }
-    var responseModel: ResponseModel.Type { get }
-}
-
-class WebSocketManager<API: WebSocketAPIITEM>: NSObject, URLSessionWebSocketDelegate {
-    private var webSocketTask: URLSessionWebSocketTask?
-    private var urlSession: URLSession!
-    private var api: API
-    
-    private var isConnected: Bool = false
-    private var receiveContinuation: CheckedContinuation<API.ResponseModel, Error>?
-    
-    init(api: API) {
-        self.api = api
-        super.init()
-        let configuration = URLSessionConfiguration.default
-        configuration.httpAdditionalHeaders = api.header
-        self.urlSession = URLSession(configuration: configuration, delegate: self, delegateQueue: OperationQueue())
-    }
-    
-    func connect() {
-        guard let url = URL(string: "\(api.server.domain)\(api.path)") else {
-            print("Invalid URL")
-            return
-        }
-        let request = URLRequest(url: url)
-        webSocketTask = urlSession.webSocketTask(with: request)
-        webSocketTask?.resume()
-        isConnected = true
-        listen()
-    }
-    
-    func disconnect() {
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        isConnected = false
-    }
-    
-    func send(_ message: API.RequestModel) async throws {
-        let data = try api.requestEncoder.encoding(param: message)
-        let jsonString = String(data: data, encoding: .utf8) ?? ""
-        let wsMessage = URLSessionWebSocketTask.Message.string(jsonString)
-        try await webSocketTask?.send(wsMessage)
-    }
-    
-    func receive() async throws -> API.ResponseModel {
-        return try await withCheckedThrowingContinuation { continuation in
-            receiveContinuation = continuation
-        }
-    }
-    
-    private func listen() {
-        webSocketTask?.receive { [weak self] result in
-            guard let self = self else { return }
-            switch result {
-            case .failure(let error):
-                self.receiveContinuation?.resume(throwing: error)
-            case .success(let message):
-                switch message {
-                case .string(let text):
-                    if let data = text.data(using: .utf8) {
-                        do {
-                            let response = try self.api.responseDecoder.decode(API.ResponseModel.self, from: data)
-                            self.receiveContinuation?.resume(returning: response)
-                        } catch {
-                            self.receiveContinuation?.resume(throwing: error)
-                        }
-                    } else {
-                        let error = NSError(domain: "WebSocketManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to convert text to data"])
-                        self.receiveContinuation?.resume(throwing: error)
-                    }
-                case .data(let data):
-                    do {
-                        let response = try self.api.responseDecoder.decode(API.ResponseModel.self, from: data)
-                        self.receiveContinuation?.resume(returning: response)
-                    } catch {
-                        self.receiveContinuation?.resume(throwing: error)
-                    }
-                @unknown default:
-                    break
-                }
-            }
-            if self.isConnected {
-                self.listen()
-            }
-        }
-    }
-    
-    // URLSessionWebSocketDelegate 메서드 구현 (옵션)
-    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
-        print("WebSocket connected")
-    }
-    
-    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
-        print("WebSocket disconnected")
-        isConnected = false
-    }
-}
