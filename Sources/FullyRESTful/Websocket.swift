@@ -165,17 +165,17 @@ public class TopicITEM {
     var parentWebsocket: any WebSocketAPIITEM
 
     /// ✅ 토픽을 구독하여 메시지 수신
-    func listen() -> AnyPublisher<WebSocketReceiveMessageModel?, Error> {
+    public func listen() -> AnyPublisher<WebSocketReceiveMessageModel?, Error> {
         return parentWebsocket.getPublisher(requester: self)
     }
 
     /// ✅ 특정 채널로 메시지 전송
-    func send(message: WebSocketSendMessageModel) async throws -> Bool {
+    public func send(message: WebSocketSendMessageModel) async throws -> Bool {
         try await parentWebsocket.send(message, to: topicName)
     }
 
     /// ✅ 토픽 구독 해제
-    func close() {
+    public func close() {
         parentWebsocket.close(requester: self)
     }
 }
