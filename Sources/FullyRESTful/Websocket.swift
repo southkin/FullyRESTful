@@ -26,7 +26,7 @@ public protocol WebSocketAPIITEM_Protocol {
     var path: String { get set }
 }
 /// ✅ WebSocket API 인터페이스
-public class WebSocketAPIITEM_Class {
+open class WebSocketAPIITEM_Class {
     public var webSocketTask: URLSessionWebSocketTask?
     public var publishers: [String: CurrentValueSubject<WebSocketReceiveMessageModel?, Error>] = .init()
     public var pingInterval:TimeInterval = 10
