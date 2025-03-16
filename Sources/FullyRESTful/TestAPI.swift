@@ -109,10 +109,8 @@ extension TestAPI {
 enum TestWebSocket {}
 extension TestWebSocket {
     class WebSocketEcho: WebSocketAPIITEM {
-        var publishers: [String: CurrentValueSubject<WebSocketReceiveMessageModel?, any Error>] = [:]
-        var webSocketTask: URLSessionWebSocketTask?
         var server: ServerInfo = .init(domain: "wss://echo.websocket.org", defaultHeader: [:])
+        
         var path: String = ""
     }
 }
-

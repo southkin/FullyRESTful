@@ -20,25 +20,21 @@ public enum WebSocketReceiveMessageModel {
     case text(String)
     case binary(Data)
 }
-
-/// ✅ WebSocket API 인터페이스
-public protocol WebSocketAPIITEM : AnyObject {
-    var server: ServerInfo { get }
-    var path: String { get }
-    var header: [String: String] { get }
-    var webSocketTask: URLSessionWebSocketTask? { get set }
-    var publishers: [String: CurrentValueSubject<WebSocketReceiveMessageModel?, Error>] { get set }
-    var pingInterval:TimeInterval { get set }
+public class TestClass {}
+public protocol WebSocketAPIITEM_Protocol {
+    var server: ServerInfo { get set }
+    var path: String { get set }
 }
+/// ✅ WebSocket API 인터페이스
+public class WebSocketAPIITEM_Class {
+    public var webSocketTask: URLSessionWebSocketTask?
+    public var publishers: [String: CurrentValueSubject<WebSocketReceiveMessageModel?, Error>] = .init()
+    public var pingInterval:TimeInterval = 10
+}
+public typealias WebSocketAPIITEM = WebSocketAPIITEM_Class & WebSocketAPIITEM_Protocol
 
-public extension WebSocketAPIITEM {
-    var header: [String: String] {
-        self.server.defaultHeader
-    }
-    
-    var pingInterval:TimeInterval {
-        10
-    }
+public extension WebSocketAPIITEM_Protocol where Self: WebSocketAPIITEM_Class {
+    var header: [String: String] { self.server.defaultHeader }
     /// ✅ 새로운 토픽 생성
     func makeTopic(name: String) -> TopicITEM {
         return TopicITEM(topicName: name, id: UUID().uuidString, parentWebsocket: self)
@@ -162,12 +158,12 @@ public extension WebSocketAPIITEM {
 public class TopicITEM {
     let topicName: String
     let id: String
-    init(topicName: String, id: String, parentWebsocket: any WebSocketAPIITEM) {
+    init(topicName: String, id: String, parentWebsocket: WebSocketAPIITEM) {
         self.topicName = topicName
         self.id = id
         self.parentWebsocket = parentWebsocket
     }
-    var parentWebsocket: any WebSocketAPIITEM
+    var parentWebsocket: WebSocketAPIITEM
 
     /// ✅ 토픽을 구독하여 메시지 수신
     public func listen() -> AnyPublisher<WebSocketReceiveMessageModel?, Error> {
