@@ -20,7 +20,6 @@ public enum WebSocketReceiveMessageModel {
     case text(String)
     case binary(Data)
 }
-public class TestClass {}
 public protocol WebSocketAPIITEM_Protocol {
     var server: ServerInfo { get set }
     var path: String { get set }
@@ -30,6 +29,7 @@ open class WebSocketAPIITEM_Class {
     public var webSocketTask: URLSessionWebSocketTask?
     public var publishers: [String: CurrentValueSubject<WebSocketReceiveMessageModel?, Error>] = .init()
     public var pingInterval:TimeInterval = 10
+    public init() {}
 }
 public typealias WebSocketAPIITEM = WebSocketAPIITEM_Class & WebSocketAPIITEM_Protocol
 
