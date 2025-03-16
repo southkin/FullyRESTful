@@ -28,6 +28,7 @@ public protocol WebSocketAPIITEM : AnyObject {
     var header: [String: String] { get }
     var webSocketTask: URLSessionWebSocketTask? { get set }
     var publishers: [String: CurrentValueSubject<WebSocketReceiveMessageModel?, Error>] { get set }
+    var pingInterval:TimeInterval { get set }
 }
 
 public extension WebSocketAPIITEM {
@@ -35,6 +36,9 @@ public extension WebSocketAPIITEM {
         self.server.defaultHeader
     }
     
+    var pingInterval:TimeInterval {
+        10
+    }
     /// ✅ 새로운 토픽 생성
     func makeTopic(name: String) -> TopicITEM {
         return TopicITEM(topicName: name, id: UUID().uuidString, parentWebsocket: self)
@@ -59,12 +63,13 @@ public extension WebSocketAPIITEM {
     }
     /// ✅ WebSocket 연결 상태 확인
     private func listenForConnection() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + pingInterval) {
             self.webSocketTask?.sendPing { error in
                 if let error = error {
                     print("❌ WebSocket Ping Failed: \(error)")
                 } else {
                     print("✅ WebSocket 연결 성공")
+                    self.listenForConnection()
                 }
             }
         }
