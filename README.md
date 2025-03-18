@@ -1,37 +1,44 @@
-# FullyRESTful - Swift 네트워크 라이브러리
+# FullyRESTful
 
-Swift에서 **RESTful API** 및 **WebSocket**을 손쉽게 다룰 수 있도록 설계된 경량 네트워킹 라이브러리입니다.
+FullyRESTful is a Swift networking library supporting **RESTful API calls**, **WebSocket connections**, and **Multipart uploads** with a simple and declarative approach.
 
-## 🚀 주요 기능
-- RESTful API 호출 (`APIITEM` 프로토콜 기반)
-- 멀티파트 폼 데이터 업로드 (`MultipartUpload` 프로토콜)
-- WebSocket 연결 및 메시지 구독 (`WebSocketAPIITEM` 프로토콜)
-- 간편한 `cURL` 로그 출력
-- `Combine` 기반의 스트리밍 및 이벤트 처리
+## Features
+- **Declarative API Definitions**  
+  Define API calls with just a struct, including request, response models, and path.
+- **RESTful API Calls**  
+  Easily perform HTTP requests with JSON encoding/decoding.
+- **WebSocket Support**  
+  Subscribe, send messages, and receive real-time updates with Combine.
+- **Multipart File Uploads**  
+  Attach files in API requests with minimal configuration.
+- **Modular Targeting**  
+  Use only the features you need (RESTful API, WebSockets, or both).
 
 ---
 
-## 📦 설치 방법
+## Installation
 
-### Swift Package Manager (SPM)
+### Swift Package Manager
+
 ```swift
 dependencies: [
-    .package(url: "https://github.com/southkin/FullyRESTfu.git", .upToNextMajor(from: "1.0.0"))
+    .package(url: "https://github.com/southkin/FullyRESTful.git", .upToNextMajor(from: "2.0.0"))
 ]
 ```
 
 ---
 
-## 🛠 RESTful API 사용법
-### 📌 1. 서버 정보 선언
+## RESTful API Usage
+
+### Define a Server
 ```swift
-let myServer: ServerInfo = .init(domain: "https://foo.bar", defaultHeader: [:])
+let myServer = ServerInfo(domain: "https://api.example.com", defaultHeader: [:])
 ```
 
-### 📌 2. API 선언
+### Define an API
 ```swift
-struct myAPI: APIITEM {
-    var server: ServerInfo = myServer
+struct MyAPI: APIITEM {
+    var server = myServer
     
     struct Request: Codable {
         let param1: String?
@@ -50,25 +57,22 @@ struct myAPI: APIITEM {
     var method: HTTPMethod = .POST
     var path: String = "/myapi/path"
 }
-```
 
-### 📌 3. API 호출
-#### ✅ Raw Data 요청
-```swift
-let data = try? await myAPI().getData(param: .init(param1: "param1", param2: [1,2,3], param3: ["param3Key":1.123]))
-```
+// Request as Data
+let data = try? await MyAPI().getData(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.123]))
 
-#### ✅ ResponseModel 변환
-```swift
-let model = try? await myAPI().request(param: .init(param1: "param1", param2: [1,2,3], param3: ["param3Key":1.123]))
+// Request as Response Model
+let model = try? await MyAPI().request(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.123]))
 ```
 
 ---
 
-## 📂 Multipart 업로드
+## Multipart File Upload
+
+### Define a Multipart Upload API
 ```swift
-struct myUploadAPI: APIITEM, MultipartUpload {
-    var server: ServerInfo = myServer
+struct MyUploadAPI: APIITEM, MultipartUpload {
+    var server = myServer
     
     struct Request: Codable {
         let param1: String
@@ -84,102 +88,81 @@ struct myUploadAPI: APIITEM, MultipartUpload {
     var requestModel = Request.self
     var responseModel = Response.self
     var method: HTTPMethod = .POST
-    var path: String = "/myapi/path/upload"
+    var path: String = "/myapi/upload"
 }
 
-guard let imageData = UIImage(named: "myImage")?.pngData() else { return }
+guard let imageData = UIImage(named: "exampleImage")?.pngData() else { return }
 
-// ✅ 데이터 업로드
-let data = try? await myUploadAPI().getData(
+// Request as Data
+let data = try? await MyUploadAPI().getData(
     param: .init(
-        param1: "param1",
+        param1: "example",
         param2: [1.2, 3.4],
-        param3: .init(data: imageData, mimeType: "image/png", fileName: "myImage1"),
-        param4: .init(data: imageData, mimeType: "image/png", fileName: "myImage2")
+        param3: .init(data: imageData, mimeType: "image/png", fileName: "image1"),
+        param4: .init(data: imageData, mimeType: "image/png", fileName: "image2")
     )
 )
 
-// ✅ 모델 변환 후 응답 받기
-let model = try? await myUploadAPI().request(
+// Request as Response Model
+let model = try? await MyUploadAPI().request(
     param: .init(
-        param1: "param1",
+        param1: "example",
         param2: [1.2, 3.4],
-        param3: .init(data: imageData, mimeType: "image/png", fileName: "myImage1"),
-        param4: .init(data: imageData, mimeType: "image/png", fileName: "myImage2")
+        param3: .init(data: imageData, mimeType: "image/png", fileName: "image1"),
+        param4: .init(data: imageData, mimeType: "image/png", fileName: "image2")
     )
 )
-```
-
-
----
-
-## 📜 `cURL` 로그 활성화
-API 요청을 `cURL`로 출력하려면 `curlLog = true` 옵션을 설정하면 됩니다.
-```swift
-struct myAPI: APIITEM {
-    // 기존 설정 정보
-    var curlLog: Bool = true
-}
-```
-
-출력 예시:
-```bash
-curl https://foo.bar/myapi/path -X POST -H "Content-Type: application/json" -d '{"param1":"value1","param2":[1,2,3]}'
 ```
 
 ---
 
-## 🌍 WebSocket 사용법
-FullyRESTful은 **WebSocket 연결 및 메시지 송수신**을 위한 `WebSocketAPIITEM`을 제공합니다.
+## WebSocket Usage
 
-### 📌 1. WebSocket 선언
+### Define a WebSocket Connection
 ```swift
-enum MyWebSockets {
-    class EchoSocket: WebSocketAPIITEM {
-        var publishers: [String: CurrentValueSubject<WebSocketReceiveMessageModel?, any Error>] = [:]
-        var webSocketTask: URLSessionWebSocketTask?
-        var server: ServerInfo = .init(domain: "wss://echo.websocket.org", defaultHeader: [:])
-        var path: String = ""
+enum TestWebSocket {}
+extension TestWebSocket {
+    class WebSocketEcho: WebSocketAPIITEM {
+        var server = ServerInfo(domain: "wss://echo.websocket.org", defaultHeader: [:])
+        var path = ""
     }
 }
 ```
 
-### 📌 2. WebSocket 연결 및 메시지 수신
+### Subscribe to a WebSocket Topic
 ```swift
-let echoSocket = MyWebSockets.EchoSocket()
-let echoTopic = echoSocket.makeTopic(name: "echo")
+let webSocket = TestWebSocket.WebSocketEcho()
+let topic = webSocket.makeTopic(name: "echo")
 
-echoTopic.listen()
-    .compactMap { $0 }
-    .sink(receiveValue: { message in
-        print("📩 Received:", message)
+topic.listen()
+    .sink(receiveCompletion: { _ in }, receiveValue: { message in
+        print("Received:", message)
     })
     .store(in: &cancellables)
 ```
 
-### 📌 3. WebSocket 메시지 송신
+### Send a Message
 ```swift
-let success = try await echoTopic.send(message: .text("Hello, WebSocket!"))
-print("📤 Send Result:", success)
-```
-
-### 📌 4. WebSocket 닫기
-```swift
-echoTopic.close()
+let isSuccess = try? await topic.send(message: .text("Hello, WebSocket!"))
+if isSuccess == true {
+    print("✅ Message sent successfully")
+}
 ```
 
 ---
 
-## 📋 지원 기능 요약
-| 기능                 | 설명                                                   |
-|--------------------|----------------------------------------------------|
-| ✅ `APIITEM` 지원 | RESTful API를 선언형 방식으로 구성                     |
-| ✅ `MultipartUpload` | 파일 업로드 API를 손쉽게 구현 가능                    |
-| ✅ `cURL 로그`     | API 요청을 `cURL` 형식으로 확인 가능                     |
-| ✅ `WebSocketAPIITEM` | WebSocket 연결 및 메시지 송수신 지원                    |
-| ✅ `Combine` 지원  | WebSocket 메시지 스트리밍 및 필터링 처리 가능             |
+## Request Debugging (cURL Log)
+Enable cURL logging for API requests.
+```swift
+struct MyAPI: APIITEM {
+    // ... existing API configurations
+    var curlLog = true
+}
+```
+
+This will print the equivalent cURL command for debugging API requests.
 
 ---
 
-## 📌 라이선스
-이 프로젝트는 MIT 라이선스에 따라 배포됩니다.
+## License
+FullyRESTful is released under the MIT license.
