@@ -150,7 +150,7 @@ extension APIITEM {
         
         
         if contentType.contains("application/json") {
-            return .init(model: try JSONDecoder().decode(ResponseModel.self, from: data), rawResponse: response)
+            return .init(model: try? JSONDecoder().decode(ResponseModel.self, from: data), rawResponse: response)
         } else if contentType.contains("text/plain") {
             return .init(model: String(data: data, encoding: .utf8) as? ResponseModel, rawResponse: response)
         } else {
