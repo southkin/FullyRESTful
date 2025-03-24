@@ -4,9 +4,9 @@ public protocol MultipartUpload {
 }
 
 public struct MultipartItem: Codable {
-    var data: Data
-    var mimeType: String
-    var fileName: String
+    public var data: Data
+    public var mimeType: String
+    public var fileName: String
     public init(data: Data, mimeType: String, fileName: String) {
         self.data = data
         self.mimeType = mimeType
@@ -48,7 +48,7 @@ public protocol APIITEM_BASE {
     var method: HTTPMethod { get }
     var server: ServerInfo { get }
     var path: String { get }
-    var header: [String: String] { get }
+    var header: [String: String] { get set }
     var paramEncoder: ParameterEncode { get }
     var strEncoder: String.Encoding { get }
     var curlLog: Bool { get }
@@ -76,6 +76,14 @@ public extension APIITEM_BASE {
     }
 }
 
+public struct DataResponse {
+    public let data: Data
+    public let rawResponse: HTTPURLResponse
+}
+public struct APIResponse<T: Decodable> {
+    public let model: T?
+    public let rawResponse: HTTPURLResponse
+}
 public protocol APIITEM: APIITEM_BASE {
     associatedtype ResponseModel: Decodable
     associatedtype RequestModel: Encodable
@@ -84,7 +92,7 @@ public protocol APIITEM: APIITEM_BASE {
 }
 
 extension APIITEM {
-    public func getData(param: RequestModel) async throws -> (Data, URLResponse)? {
+    public func getData(param: RequestModel) async throws -> DataResponse? {
         guard let url = URL(string: "\(server.domain)\(path)") else {
             throw URLError(.badURL)
         }
@@ -121,7 +129,7 @@ extension APIITEM {
             }
             switch self.statusCodeValid(httpResponse.statusCode) {
             case .success:
-                return (data, httpResponse)
+                return .init(data: data, rawResponse: httpResponse)
             case .retry:
                 retries += 1
                 continue
@@ -133,18 +141,18 @@ extension APIITEM {
         throw NSError(domain: "RetriesExceeded", code: -1, userInfo: [NSLocalizedDescriptionKey: "Maximum retry attempts exceeded"])
     }
     
-    public func request(param: RequestModel) async throws -> ResponseModel? {
+    public func request(param: RequestModel) async throws -> APIResponse<ResponseModel>? {
         guard let dataInfo = try await getData(param: param),
-              let response = dataInfo.1 as? HTTPURLResponse,
-              let contentType = response.allHeaderFields["Content-Type"] as? String
+              let contentType = dataInfo.rawResponse.allHeaderFields["Content-Type"] as? String
         else { return nil }
-        let data = dataInfo.0
+        let response = dataInfo.rawResponse
+        let data = dataInfo.data
         
         
         if contentType.contains("application/json") {
-            return try JSONDecoder().decode(ResponseModel.self, from: data)
+            return .init(model: try JSONDecoder().decode(ResponseModel.self, from: data), rawResponse: response)
         } else if contentType.contains("text/plain") {
-            return String(data: data, encoding: .utf8) as? ResponseModel
+            return .init(model: String(data: data, encoding: .utf8) as? ResponseModel, rawResponse: response)
         } else {
             return nil
         }

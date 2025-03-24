@@ -59,10 +59,10 @@ struct MyAPI: APIITEM {
 }
 
 // Request as Data
-let data = try? await MyAPI().getData(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.123]))
+let data = try? await MyAPI().getData(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.123])).data
 
 // Request as Response Model
-let model = try? await MyAPI().request(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.123]))
+let model = try? await MyAPI().request(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.123])).model
 ```
 
 ---
@@ -100,7 +100,7 @@ let data = try? await MyUploadAPI().getData(
         param2: [1.2, 3.4],
         param3: .init(data: imageData, mimeType: "image/png", fileName: "image1"),
         param4: .init(data: imageData, mimeType: "image/png", fileName: "image2")
-    )
+    ).data
 )
 
 // Request as Response Model
@@ -110,7 +110,7 @@ let model = try? await MyUploadAPI().request(
         param2: [1.2, 3.4],
         param3: .init(data: imageData, mimeType: "image/png", fileName: "image1"),
         param4: .init(data: imageData, mimeType: "image/png", fileName: "image2")
-    )
+    ).model
 )
 ```
 
