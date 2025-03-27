@@ -70,7 +70,7 @@ extension TestAPI {
     
     // ✅ PUT - 사용자 정보 수정
     struct UpdateUser: APIITEM {
-        var header: [String : String]
+        var header: [String : String] = [:]
         
         struct Request: Codable {
             let name: String
