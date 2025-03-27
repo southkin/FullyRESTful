@@ -7,7 +7,7 @@ final class TestAPITests: XCTestCase {
     func testFetchUserList() async throws {
         let api = TestAPI.ListUsers()
         do {
-            let response = try await api.request(param: .init(page: 1))
+            let response = try await api.request(param: .init(page: 1))?.model
             XCTAssertNotNil(response, "응답이 nil이면 안됩니다.")
             XCTAssertGreaterThan(response!.data.count, 0, "유저 목록이 비어 있습니다.")
             
@@ -24,9 +24,9 @@ final class TestAPITests: XCTestCase {
         let api = TestAPI.CreateUser()
         do {
             let response = try await api.request(param: .init(name: "John Doe", job: "Developer"))
-            XCTAssertNotNil(response, "응답이 nil이면 안 됩니다.")
-            XCTAssertEqual(response?.name, "John Doe")
-            XCTAssertEqual(response?.job, "Developer")
+            XCTAssertNotNil(response?.model, "응답이 nil이면 안 됩니다.")
+            XCTAssertEqual(response?.model?.name, "John Doe")
+            XCTAssertEqual(response?.model?.job, "Developer")
         } catch {
             XCTFail("POST API 호출 실패: \(error.localizedDescription)")
         }
@@ -37,9 +37,9 @@ final class TestAPITests: XCTestCase {
         let api = TestAPI.UpdateUser(userID: 2)
         do {
             let response = try await api.request(param: .init(name: "Jane Doe", job: "Manager"))
-            XCTAssertNotNil(response, "응답이 nil이면 안 됩니다.")
-            XCTAssertEqual(response?.name, "Jane Doe")
-            XCTAssertEqual(response?.job, "Manager")
+            XCTAssertNotNil(response?.model, "응답이 nil이면 안 됩니다.")
+            XCTAssertEqual(response?.model?.name, "Jane Doe")
+            XCTAssertEqual(response?.model?.job, "Manager")
         } catch {
             XCTFail("PUT API 호출 실패: \(error.localizedDescription)")
         }
