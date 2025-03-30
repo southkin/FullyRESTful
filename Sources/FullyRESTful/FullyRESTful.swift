@@ -93,8 +93,15 @@ public protocol APIITEM: APIITEM_BASE {
 
 extension APIITEM {
     public func getData(param: RequestModel) async throws -> DataResponse? {
-        guard let url = URL(string: "\(server.domain)\(path)") else {
+        guard var url = URL(string: "\(server.domain)\(path)") else {
             throw URLError(.badURL)
+        }
+        if [HTTPMethod.GET].contains(method), let dict = param.dict {
+            guard var urlComponents = URLComponents(string: "\(server.domain)\(path)") else {
+                throw URLError(.badURL)
+            }
+            urlComponents.queryItems = dict.map { URLQueryItem(name: $0.key, value: "\($0.value)") }
+            url = urlComponents.url ?? url
         }
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
@@ -111,7 +118,7 @@ extension APIITEM {
             for (key, value) in header {
                 request.setValue(value, forHTTPHeaderField: key)
             }
-            if ![HTTPMethod.GET, HTTPMethod.HEAD].contains(method) {
+            if ![HTTPMethod.GET].contains(method) {
                 request.httpBody = try paramEncoder.encoding(param: param)
             }
         }
