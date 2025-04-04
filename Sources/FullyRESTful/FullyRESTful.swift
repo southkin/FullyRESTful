@@ -145,15 +145,30 @@ extension APIITEM {
         guard let dataInfo = try await getData(param: param),
               let contentType = dataInfo.rawResponse.allHeaderFields["Content-Type"] as? String
         else { return nil }
+        
         let response = dataInfo.rawResponse
         let data = dataInfo.data
         
-        
         if contentType.contains("application/json") {
-            return .init(model: try? JSONDecoder().decode(ResponseModel.self, from: data), rawResponse: response)
+            do {
+                let decoded = try JSONDecoder().decode(ResponseModel.self, from: data)
+                return .init(model: decoded, rawResponse: response)
+            } catch {
+                print("❌ JSON 디코딩 실패: \(error)")
+                print("📦 Raw Data: \(String(data: data, encoding: .utf8) ?? "N/A")")
+                throw error
+            }
         } else if contentType.contains("text/plain") {
-            return .init(model: String(data: data, encoding: .utf8) as? ResponseModel, rawResponse: response)
+            if let text = String(data: data, encoding: .utf8) as? ResponseModel {
+                return .init(model: text, rawResponse: response)
+            } else {
+                print("❌ Plain text 디코딩 실패")
+                print("📦 Raw Data: \(String(data: data, encoding: .utf8) ?? "N/A")")
+                return nil
+            }
         } else {
+            print("⚠️ 지원되지 않는 Content-Type: \(contentType)")
+            print("📦 Raw Data: \(String(data: data, encoding: .utf8) ?? "N/A")")
             return nil
         }
     }
