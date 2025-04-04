@@ -20,6 +20,8 @@ struct TestUserInfo : Codable {
 }
 extension TestAPI {
     struct ListUsers : APIITEM {
+        var header: [String : String] = [:]
+        
         struct Request : Codable {
             let page:Int
         }
@@ -44,6 +46,8 @@ extension TestAPI {
     }
     // ✅ POST - 사용자 생성
     struct CreateUser: APIITEM {
+        var header: [String : String] = [:]
+        
         struct Request: Codable {
             let name: String
             let job: String
@@ -66,6 +70,8 @@ extension TestAPI {
     
     // ✅ PUT - 사용자 정보 수정
     struct UpdateUser: APIITEM {
+        var header: [String : String] = [:]
+        
         struct Request: Codable {
             let name: String
             let job: String
