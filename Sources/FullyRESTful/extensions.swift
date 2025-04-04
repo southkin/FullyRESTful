@@ -34,7 +34,7 @@ extension URLSession {
 extension URLRequest {
     var curlString: String {
         guard let url = self.url else { return "" }
-        var baseCommand = "curl \(url.absoluteString)"
+        var baseCommand = "curl \"\(url.absoluteString)\""
         if self.httpMethod == "HEAD" {
             baseCommand += " --head"
         }
