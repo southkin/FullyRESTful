@@ -4,6 +4,14 @@
 
 ---
 
+# 🚨 FullyRESTful 3.0.0
+**Breaking Changes in WebSocket Support**
+
+The internal WebSocket system has been completely restructured.
+If you were using WebSocket features in version 2.x, please update your usage accordingly.
+
+[See Migration Guide →](./md/MigrationGuide.md)
+
 ## 🚀 Features
 
 - 📦 **Modular** – Use only REST or WebSocket components as needed.
