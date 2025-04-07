@@ -1,168 +1,156 @@
 # FullyRESTful
 
-FullyRESTful is a Swift networking library supporting **RESTful API calls**, **WebSocket connections**, and **Multipart uploads** with a simple and declarative approach.
-
-## Features
-- **Declarative API Definitions**  
-  Define API calls with just a struct, including request, response models, and path.
-- **RESTful API Calls**  
-  Easily perform HTTP requests with JSON encoding/decoding.
-- **WebSocket Support**  
-  Subscribe, send messages, and receive real-time updates with Combine.
-- **Multipart File Uploads**  
-  Attach files in API requests with minimal configuration.
-- **Modular Targeting**  
-  Use only the features you need (RESTful API, WebSockets, or both).
+**FullyRESTful** is a Swift library supporting both **RESTful APIs** and **WebSocket** connections in a simple, declarative, and composable way.
 
 ---
 
-## Installation
+## 🚀 Features
 
-### Swift Package Manager
+- 📦 **Modular** – Use only REST or WebSocket components as needed.
+- 📡 **WebSocket** – Stream messages with Combine. Automatic connection & disconnect.
+- 📠 **RESTful API** – Simple declaration of request/response models.
+- 📁 **Multipart Upload** – File uploads made easy.
+- 🧪 **Testing Friendly** – Fully testable with XCTest.
+
+---
+
+## 📦 Installation
+
+Using **Swift Package Manager**:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/southkin/FullyRESTful.git", .upToNextMajor(from: "2.0.0"))
+    .package(url: "https://github.com/southkin/FullyRESTful.git", from: "2.0.0")
 ]
 ```
 
 ---
 
-## RESTful API Usage
+## 🌐 RESTful API
 
-### Define a Server
+### 1. Define API
+
 ```swift
 let myServer = ServerInfo(domain: "https://api.example.com", defaultHeader: [:])
-```
 
-### Define an API
-```swift
 struct MyAPI: APIITEM {
     var server = myServer
     
     struct Request: Codable {
-        let param1: String?
-        let param2: [Int]
-        let param3: [String: Float]
+        let name: String
+        let values: [Int]
     }
 
     struct Response: Codable {
-        let result1: [String]
-        let result2: [Int]?
-        let result3: [String: Float]?
+        let message: String
+        let result: [Int]
     }
 
     var requestModel = Request.self
     var responseModel = Response.self
     var method: HTTPMethod = .POST
-    var path: String = "/myapi/path"
+    var path: String = "/example/path"
 }
+```
 
-// Request as Data
-let data = try? await MyAPI().getData(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.123])).data
+### 2. Make Request
 
-// Request as Response Model
-let model = try? await MyAPI().request(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.123])).model
+```swift
+let model = try await MyAPI().request(param: .init(name: "Test", values: [1, 2, 3])).model
 ```
 
 ---
 
-## Multipart File Upload
+## 🧷 Multipart Upload
 
-### Define a Multipart Upload API
 ```swift
-struct MyUploadAPI: APIITEM, MultipartUpload {
+struct UploadAPI: APIITEM, MultipartUpload {
     var server = myServer
-    
+
     struct Request: Codable {
-        let param1: String
-        let param2: [Float]
-        let param3: MultipartItem
-        let param4: MultipartItem
+        let image: MultipartItem
+        let title: String
     }
 
     struct Response: Codable {
-        let result1: [String]
+        let status: String
     }
 
     var requestModel = Request.self
     var responseModel = Response.self
     var method: HTTPMethod = .POST
-    var path: String = "/myapi/upload"
+    var path: String = "/upload"
 }
 
-guard let imageData = UIImage(named: "exampleImage")?.pngData() else { return }
+let imageData = UIImage(named: "sample")!.pngData()!
+let item = MultipartItem(data: imageData, mimeType: "image/png", fileName: "sample.png")
 
-// Request as Data
-let data = try? await MyUploadAPI().getData(
-    param: .init(
-        param1: "example",
-        param2: [1.2, 3.4],
-        param3: .init(data: imageData, mimeType: "image/png", fileName: "image1"),
-        param4: .init(data: imageData, mimeType: "image/png", fileName: "image2")
-    ).data
-)
-
-// Request as Response Model
-let model = try? await MyUploadAPI().request(
-    param: .init(
-        param1: "example",
-        param2: [1.2, 3.4],
-        param3: .init(data: imageData, mimeType: "image/png", fileName: "image1"),
-        param4: .init(data: imageData, mimeType: "image/png", fileName: "image2")
-    ).model
-)
+let response = try await UploadAPI().request(
+    param: .init(image: item, title: "My Image")
+).model
 ```
 
 ---
 
-## WebSocket Usage
+## 🔌 WebSocket
 
-### Define a WebSocket Connection
+### 1. Define a WebSocket
+
 ```swift
-enum TestWebSocket {}
-extension TestWebSocket {
-    class WebSocketEcho: WebSocketAPIITEM {
-        var server = ServerInfo(domain: "wss://echo.websocket.org", defaultHeader: [:])
-        var path = ""
-    }
+struct EchoSocket: WebSocketITEM {
+    var server = ServerInfo(domain: "wss://echo.websocket.org", defaultHeader: [:])
+    var path = ""
 }
 ```
 
-### Subscribe to a WebSocket Topic
-```swift
-let webSocket = TestWebSocket.WebSocketEcho()
-let topic = webSocket.makeTopic(name: "echo")
+### 2. Listen to Messages
 
-topic.listen()
-    .sink(receiveCompletion: { _ in }, receiveValue: { message in
+```swift
+let socket = EchoSocket()
+
+socket.listen()
+    .compactMap { $0 }
+    .sink { message in
         print("Received:", message)
-    })
+    }
     .store(in: &cancellables)
 ```
 
-### Send a Message
+### 3. Send a Message
+
 ```swift
-let isSuccess = try? await topic.send(message: .text("Hello, WebSocket!"))
-if isSuccess == true {
-    print("✅ Message sent successfully")
-}
+try await socket.send(.text("Hello!"))
 ```
 
 ---
 
-## Request Debugging (cURL Log)
-Enable cURL logging for API requests.
+## 🧠 Advanced
+
+- ✅ **Automatic Disconnect**: If no subscribers remain, the WebSocket disconnects.
+- 🔁 **Connection Reuse**: New listeners share existing connections.
+- 🛠 **Custom Ping Interval**: Conform to `WebSocketITEM` with `pingInterval`.
+- 🧪 **Debug Helper**:
+
+```swift
+#if DEBUG
+let isDisconnected = socket.isDisconnected(socket)
+#endif
+```
+
+---
+
+## 🔍 Debug cURL
+
+Enable cURL logging for REST APIs:
+
 ```swift
 struct MyAPI: APIITEM {
-    // ... existing API configurations
     var curlLog = true
 }
 ```
 
-This will print the equivalent cURL command for debugging API requests.
-
 ---
 
-## License
-FullyRESTful is released under the MIT license.
+## 📄 License
+
+MIT License.

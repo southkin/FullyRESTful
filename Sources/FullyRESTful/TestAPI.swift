@@ -46,7 +46,7 @@ extension TestAPI {
     }
     // ✅ POST - 사용자 생성
     struct CreateUser: APIITEM {
-        var header: [String : String] = [:]
+        var header: [String : String] = ["Content-Type": "application/json"]
         
         struct Request: Codable {
             let name: String
@@ -70,7 +70,7 @@ extension TestAPI {
     
     // ✅ PUT - 사용자 정보 수정
     struct UpdateUser: APIITEM {
-        var header: [String : String] = [:]
+        var header: [String : String] = ["Content-Type": "application/json"]
         
         struct Request: Codable {
             let name: String
@@ -114,7 +114,7 @@ extension TestAPI {
 
 enum TestWebSocket {}
 extension TestWebSocket {
-    class WebSocketEcho: WebSocketAPIITEM {
+    class WebSocketEcho: WebSocketITEM {
         var server: ServerInfo = .init(domain: "wss://echo.websocket.org", defaultHeader: [:])
         
         var path: String = ""
