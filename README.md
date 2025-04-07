@@ -7,81 +7,95 @@
 # 🚨 FullyRESTful 3.0.0
 **Breaking Changes in WebSocket Support**
 
-The internal WebSocket system has been completely restructured.
+The internal WebSocket system has been completely restructured.  
 If you were using WebSocket features in version 2.x, please update your usage accordingly.
 
-[See Migration Guide →](./md/MigrationGuide.md)
+<!-- Replace with actual link after adding migration guide -->
+[See Migration Guide →](#)
+
+---
 
 ## 🚀 Features
 
-- 📦 **Modular** – Use only REST or WebSocket components as needed.
-- 📡 **WebSocket** – Stream messages with Combine. Automatic connection & disconnect.
-- 📠 **RESTful API** – Simple declaration of request/response models.
-- 📁 **Multipart Upload** – File uploads made easy.
-- 🧪 **Testing Friendly** – Fully testable with XCTest.
+- **Declarative API Definitions**  
+  Define REST or WebSocket APIs in a single Swift structure.
+- **RESTful API Support**  
+  Simple request/response modeling with JSON encoding/decoding.
+- **Multipart Upload Support**  
+  Upload files and form data with minimal configuration.
+- **Modern WebSocket Support**  
+  Connect once and share the connection via Combine.
+- **Modular Design**  
+  Use only the features you need.
 
 ---
 
 ## 📦 Installation
 
-Using **Swift Package Manager**:
+### Swift Package Manager
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/southkin/FullyRESTful.git", from: "2.0.0")
+    .package(url: "https://github.com/southkin/FullyRESTful.git", .upToNextMajor(from: "3.0.0"))
 ]
 ```
 
 ---
 
-## 🌐 RESTful API
+## 🌐 RESTful API Usage
 
-### 1. Define API
-
+### Define a Server
 ```swift
 let myServer = ServerInfo(domain: "https://api.example.com", defaultHeader: [:])
+```
 
+### Define an API
+```swift
 struct MyAPI: APIITEM {
     var server = myServer
     
     struct Request: Codable {
-        let name: String
-        let values: [Int]
+        let param1: String?
+        let param2: [Int]
+        let param3: [String: Float]
     }
 
     struct Response: Codable {
-        let message: String
-        let result: [Int]
+        let result1: [String]
+        let result2: [Int]?
+        let result3: [String: Float]?
     }
 
     var requestModel = Request.self
     var responseModel = Response.self
     var method: HTTPMethod = .POST
-    var path: String = "/example/path"
+    var path: String = "/myapi/path"
 }
 ```
 
-### 2. Make Request
-
+### Request
 ```swift
-let model = try await MyAPI().request(param: .init(name: "Test", values: [1, 2, 3])).model
+let data = try? await MyAPI().getData(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.23])).data
+
+let model = try? await MyAPI().request(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.23])).model
 ```
 
 ---
 
-## 🧷 Multipart Upload
+## 📎 Multipart Upload
 
+### Define an API with File Upload
 ```swift
-struct UploadAPI: APIITEM, MultipartUpload {
+struct MyUploadAPI: APIITEM, MultipartUpload {
     var server = myServer
 
     struct Request: Codable {
-        let image: MultipartItem
         let title: String
+        let image: MultipartItem
     }
 
     struct Response: Codable {
-        let status: String
+        let uploadedURL: String
     }
 
     var requestModel = Request.self
@@ -89,67 +103,67 @@ struct UploadAPI: APIITEM, MultipartUpload {
     var method: HTTPMethod = .POST
     var path: String = "/upload"
 }
-
-let imageData = UIImage(named: "sample")!.pngData()!
-let item = MultipartItem(data: imageData, mimeType: "image/png", fileName: "sample.png")
-
-let response = try await UploadAPI().request(
-    param: .init(image: item, title: "My Image")
-).model
 ```
 
 ---
 
-## 🔌 WebSocket
+## 🔁 WebSocket Usage
 
-### 1. Define a WebSocket
-
+### Define a WebSocket
 ```swift
 struct EchoSocket: WebSocketITEM {
     var server = ServerInfo(domain: "wss://echo.websocket.org", defaultHeader: [:])
-    var path = ""
+    var path: String = ""
 }
 ```
 
-### 2. Listen to Messages
-
+### Connect and Subscribe
 ```swift
 let socket = EchoSocket()
-
 socket.listen()
-    .compactMap { $0 }
     .sink { message in
-        print("Received:", message)
+        print("📥", message ?? "nil")
     }
     .store(in: &cancellables)
 ```
 
-### 3. Send a Message
-
+### Send Text Message
 ```swift
-try await socket.send(.text("Hello!"))
+try await socket.send(.text("Hello WebSocket!"))
+```
+
+### Send a Codable Message
+```swift
+struct ChatMessage: Codable {
+    let type: String
+    let content: String
+}
+
+let message = ChatMessage(type: "chat", content: "Hello from Codable!")
+try await socket.send(.codable(message))
+```
+
+### Decode Received Messages
+```swift
+socket.listen()
+    .compactMap {
+        guard case let .text(text) = $0,
+              let data = text.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(ChatMessage.self, from: data)
+        else { return nil }
+        return decoded
+    }
+    .sink { decoded in
+        print("📩 Decoded:", decoded)
+    }
+    .store(in: &cancellables)
 ```
 
 ---
 
-## 🧠 Advanced
+## 🧪 Debugging
 
-- ✅ **Automatic Disconnect**: If no subscribers remain, the WebSocket disconnects.
-- 🔁 **Connection Reuse**: New listeners share existing connections.
-- 🛠 **Custom Ping Interval**: Conform to `WebSocketITEM` with `pingInterval`.
-- 🧪 **Debug Helper**:
-
-```swift
-#if DEBUG
-let isDisconnected = socket.isDisconnected(socket)
-#endif
-```
-
----
-
-## 🔍 Debug cURL
-
-Enable cURL logging for REST APIs:
+Enable cURL log output for debugging:
 
 ```swift
 struct MyAPI: APIITEM {
@@ -161,4 +175,4 @@ struct MyAPI: APIITEM {
 
 ## 📄 License
 
-MIT License.
+MIT License
