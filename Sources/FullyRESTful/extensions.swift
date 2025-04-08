@@ -125,3 +125,20 @@ public extension Publisher where Output == WebSocketReceiveMessageModel?, Failur
             .eraseToAnyPublisher()
     }
 }
+public extension Publisher where Output == WebSocketReceiveMessageModel, Failure == Never {
+    func decode<T: Decodable>(_ type: T.Type) -> AnyPublisher<T, Error> {
+        self
+            .tryMap { message in
+                switch message {
+                case .text(let text):
+                    guard let data = text.data(using: .utf8) else {
+                        throw URLError(.cannotDecodeRawData)
+                    }
+                    return try JSONDecoder().decode(T.self, from: data)
+                case .binary(let data):
+                    return try JSONDecoder().decode(T.self, from: data)
+                }
+            }
+            .eraseToAnyPublisher()
+    }
+}
