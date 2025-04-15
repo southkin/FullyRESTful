@@ -1,4 +1,35 @@
 # FullyRESTful
+## ✨ What makes it different?
+
+This library lets you define APIs like this:
+
+```swift
+let responseModel = try await MyAPI().request(param: .init(...)).model
+```
+...instead of writing all this:
+
+```swift
+var request = URLRequest(url: URL(string: "...")!)
+request.httpMethod = "POST"
+request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+request.httpBody = try JSONEncoder().encode(MyAPI.Request(...))
+
+let (data, response) = try await URLSession.shared.data(for: request)
+guard let httpResponse = response as? HTTPURLResponse,
+      (200...299).contains(httpResponse.statusCode) else {
+    throw URLError(.badServerResponse)
+}
+
+let responseModel = try JSONDecoder().decode(MyAPI.Response.self, from: data)
+```
+
+## 🤔 Why FullyRESTful?
+
+- You want a clean, Swift-native way to call APIs.
+- You hate writing boilerplate URLRequests.
+- You want WebSocket and REST in the same system.
+- You want your API layer to feel like SwiftUI.
+- You want it to *just work*.
 
 **FullyRESTful** is a Swift library supporting both **RESTful APIs** and **WebSocket** connections in a simple, declarative, and composable way.
 
@@ -82,6 +113,48 @@ let model = try? await MyAPI().request(param: .init(param1: "example", param2: [
 
 ---
 
+## 🧠 Advanced Example: Shared Models & API Composition
+
+You can reuse shared request/response models across APIs:
+
+```swift
+// Shared data models
+struct Paging: Codable {
+    let page: Int
+    let limit: Int
+}
+
+struct ListResult<T: Codable>: Codable {
+    let items: [T]
+    let total: Int
+}
+
+struct User: Codable {
+    let name:String
+    let email:String
+    let nickname:String?
+}
+
+// Reusing the shared model in multiple APIs
+struct GetUsersAPI: APIITEM {
+    var server = myServer
+
+    struct Request: Codable {
+        let paging: Paging
+    }
+
+    struct Response: Codable {
+        let result: ListResult<User>
+    }
+
+    var requestModel = Request.self
+    var responseModel = Response.self
+    var method: HTTPMethod = .POST
+    var path: String = "/users/list"
+}
+```
+---
+
 ## 📎 Multipart Upload
 
 ### Define an API with File Upload
@@ -109,11 +182,19 @@ struct MyUploadAPI: APIITEM, MultipartUpload {
 
 ## 🔁 WebSocket Usage
 
+### WebSockets in FullyRESTful are:
+- automatically managed (single connection per endpoint)
+- Combine-based, and cancellable
+- pinged at regular intervals to stay alive
+- capable of sending .text, .binary, or .codable(...) payloads
+
 ### Define a WebSocket
 ```swift
 struct EchoSocket: WebSocketITEM {
     var server = ServerInfo(domain: "wss://echo.websocket.org", defaultHeader: [:])
     var path: String = ""
+    // Optional: override ping interval (default = 10 sec)
+    var pingInterval: TimeInterval { 5 }
 }
 ```
 
