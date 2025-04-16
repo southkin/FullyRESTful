@@ -48,14 +48,19 @@ public protocol APIITEM_BASE {
     var method: HTTPMethod { get }
     var server: ServerInfo { get }
     var path: String { get }
-    var header: [String: String] { get set }
+    var header: [String: String] { get }
+    var customHeader: [String: String]? { get set }
     var paramEncoder: ParameterEncode { get }
     var strEncoder: String.Encoding { get }
     var curlLog: Bool { get }
 }
 public extension APIITEM_BASE {
     var header: [String: String] {
-        self.server.defaultHeader
+        if let custom = customHeader {
+            return server.defaultHeader.merging(custom) { _, new in new }
+        } else {
+            return server.defaultHeader
+        }
     }
     var defaultStatusCodeValid: ServerInfo.StatusCodeValid {
         return { statusCode in
