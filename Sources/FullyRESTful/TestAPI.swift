@@ -20,7 +20,7 @@ struct TestUserInfo : Codable {
 }
 extension TestAPI {
     struct ListUsers : APIITEM {
-        var header: [String : String] = [:]
+        var customHeader: [String : String]?
         
         struct Request : Codable {
             let page:Int
@@ -46,7 +46,7 @@ extension TestAPI {
     }
     // ✅ POST - 사용자 생성
     struct CreateUser: APIITEM {
-        var header: [String : String] = ["Content-Type": "application/json"]
+        var customHeader: [String : String]? = ["Content-Type": "application/json"]
         
         struct Request: Codable {
             let name: String
@@ -70,7 +70,7 @@ extension TestAPI {
     
     // ✅ PUT - 사용자 정보 수정
     struct UpdateUser: APIITEM {
-        var header: [String : String] = ["Content-Type": "application/json"]
+        var customHeader: [String : String]? = ["Content-Type": "application/json"]
         
         struct Request: Codable {
             let name: String
@@ -95,6 +95,8 @@ extension TestAPI {
     }
     
     struct DeleteUser: APIITEM {
+        var customHeader: [String : String]?
+        
         struct Request: Codable {}
         
         struct Response: Codable {}
