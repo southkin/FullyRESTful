@@ -5,7 +5,7 @@
 //  Created by kin on 3/14/25.
 //
 
-import Foundation
+import KinKit
 import Combine
 
 enum TestAPI {

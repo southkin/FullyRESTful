@@ -7,7 +7,7 @@ let package = Package(
     name: "FullyRESTful",
     platforms: [
         .iOS(.v13),
-        .macOS(.v12),
+        .macOS(.v12)
     ],
     products: [
         .library(
@@ -15,10 +15,15 @@ let package = Package(
             targets: ["FullyRESTful"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/southkin/KinKit", branch: "main")
     ],
     targets: [
         .target(
-            name: "FullyRESTful"),
+            name: "FullyRESTful",
+            dependencies: [
+                .product(name: "KinKit", package: "KinKit"),
+            ]
+        ),
         .testTarget(
             name: "FullyRESTfulTests",
             dependencies: ["FullyRESTful"])

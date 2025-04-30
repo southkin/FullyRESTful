@@ -5,7 +5,7 @@
 //  Created by kin on 3/15/25.
 //
 
-import Foundation
+import KinKit
 import Combine
 
 extension URLSession {

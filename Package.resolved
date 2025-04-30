@@ -1,0 +1,50 @@
+{
+  "pins" : [
+    {
+      "identity" : "kinkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/southkin/KinKit",
+      "state" : {
+        "branch" : "main",
+        "revision" : "45b419347149aa859f4774a42a7b1cdb3ca386b2"
+      }
+    },
+    {
+      "identity" : "swift-collections",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-collections",
+      "state" : {
+        "revision" : "671108c96644956dddcd89dd59c203dcdb36cec7",
+        "version" : "1.1.4"
+      }
+    },
+    {
+      "identity" : "swift-foundation",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-foundation",
+      "state" : {
+        "branch" : "main",
+        "revision" : "7ae91602d7246ad067bc2d0be5aaaf914601378a"
+      }
+    },
+    {
+      "identity" : "swift-foundation-icu",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-foundation-icu",
+      "state" : {
+        "branch" : "main",
+        "revision" : "5b6bcf1e163b9f6185b706da2890447b3fcac9fc"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "branch" : "main",
+        "revision" : "77874c168b0233d07eb51d8045e308004df2b5a8"
+      }
+    }
+  ],
+  "version" : 2
+}

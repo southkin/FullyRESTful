@@ -1,4 +1,4 @@
-import Foundation
+import KinKit
 
 public protocol MultipartUpload {
 }
