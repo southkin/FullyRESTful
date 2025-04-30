@@ -15,7 +15,7 @@ let package = Package(
             targets: ["FullyRESTful"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/southkin/KinKit", branch: "main")
+        .package(url: "https://github.com/southkin/KinKit", from: "1.0.0")
     ],
     targets: [
         .target(
