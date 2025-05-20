@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/southkin/KinKit",
       "state" : {
-        "revision" : "664edbd3842dc7edd56180a76eeba201c6f84c4a",
-        "version" : "1.0.1"
+        "revision" : "5a797697b8c3b2df84b8302fb4e37d65d72e6185",
+        "version" : "1.0.2"
       }
     }
   ],
