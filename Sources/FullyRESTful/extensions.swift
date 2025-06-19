@@ -10,29 +10,30 @@ import Combine
 
 extension URLSession {
     func getData(for request: URLRequest) async throws -> (Data, URLResponse) {
-        do {
-            if #available(iOS 15, *) {
+        if #available(iOS 15, *) {
+            do {
                 return try await data(for: request)
-            } else {
-                return try await withCheckedThrowingContinuation { continuation in
-                    let task = self.dataTask(with: request) { data, response, error in
-                        if let error = error {
-                            continuation.resume(throwing: error)
-                            return
-                        }
-                        if let data = data, let response = response {
-                            continuation.resume(returning: (data, response))
-                        } else {
-                            let error = URLError(.badServerResponse)
-                            continuation.resume(throwing: error)
-                        }
-                    }
-                    task.resume()
-                }
             }
-        }
-        catch {
-            print(error.localizedDescription)
+            catch {
+                print("error: \(error.localizedDescription)")
+                throw error
+            }
+        } else {
+            return try await withCheckedThrowingContinuation { continuation in
+                let task = self.dataTask(with: request) { data, response, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    if let data = data, let response = response {
+                        continuation.resume(returning: (data, response))
+                    } else {
+                        let error = URLError(.badServerResponse)
+                        continuation.resume(throwing: error)
+                    }
+                }
+                task.resume()
+            }
         }
     }
 }
