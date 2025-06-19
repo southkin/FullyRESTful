@@ -10,24 +10,29 @@ import Combine
 
 extension URLSession {
     func getData(for request: URLRequest) async throws -> (Data, URLResponse) {
-        if #available(iOS 15, *) {
-            return try await data(for: request)
-        } else {
-            return try await withCheckedThrowingContinuation { continuation in
-                let task = self.dataTask(with: request) { data, response, error in
-                    if let error = error {
-                        continuation.resume(throwing: error)
-                        return
+        do {
+            if #available(iOS 15, *) {
+                return try await data(for: request)
+            } else {
+                return try await withCheckedThrowingContinuation { continuation in
+                    let task = self.dataTask(with: request) { data, response, error in
+                        if let error = error {
+                            continuation.resume(throwing: error)
+                            return
+                        }
+                        if let data = data, let response = response {
+                            continuation.resume(returning: (data, response))
+                        } else {
+                            let error = URLError(.badServerResponse)
+                            continuation.resume(throwing: error)
+                        }
                     }
-                    if let data = data, let response = response {
-                        continuation.resume(returning: (data, response))
-                    } else {
-                        let error = URLError(.badServerResponse)
-                        continuation.resume(throwing: error)
-                    }
+                    task.resume()
                 }
-                task.resume()
             }
+        }
+        catch {
+            print(error.localizedDescription)
         }
     }
 }
