@@ -44,7 +44,7 @@ extension URLRequest {
             command.append("-X \(method)")
         }
         if let headers = self.allHTTPHeaderFields {
-            for (header, value) in headers where header != "Content-Type" {
+            for (header, value) in headers {
                 let escapedHeader = header.replacingOccurrences(of: "\"", with: "\\\"")
                 let escapedValue = value.replacingOccurrences(of: "\"", with: "\\\"")
                 command.append("-H \"\(escapedHeader): \(escapedValue)\"")
