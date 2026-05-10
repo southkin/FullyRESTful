@@ -1,14 +1,6 @@
-//
-//  WebSocket.swift
-//  FullyRESTful
-//
-//  Created by kin on 3/15/25.
-//
-
+import Foundation
 import KinKit
 import Combine
-
-// MARK: - 메시지 모델
 
 public enum WebSocketSendMessageModel {
     case text(String)
@@ -21,12 +13,61 @@ public enum WebSocketReceiveMessageModel {
     case binary(Data)
 }
 
-// MARK: - WebSocket 엔드포인트 선언용 프로토콜
+public protocol WebSocketTasking: AnyObject {
+    func resume()
+    func cancel(with closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?)
+    func send(_ message: URLSessionWebSocketTask.Message) async throws
+    func receive(completionHandler: @escaping (Result<URLSessionWebSocketTask.Message, Error>) -> Void)
+    func sendPing(completionHandler: @escaping (Error?) -> Void)
+}
+
+public protocol WebSocketSessioning {
+    func webSocketTask(with request: URLRequest) -> WebSocketTasking
+}
+
+public struct URLSessionWebSocketSession: WebSocketSessioning {
+    public static let shared = URLSessionWebSocketSession()
+
+    public init() {}
+
+    public func webSocketTask(with request: URLRequest) -> WebSocketTasking {
+        URLSessionWebSocketTaskBox(task: URLSession.shared.webSocketTask(with: request))
+    }
+}
+
+private final class URLSessionWebSocketTaskBox: WebSocketTasking {
+    private let task: URLSessionWebSocketTask
+
+    init(task: URLSessionWebSocketTask) {
+        self.task = task
+    }
+
+    func resume() {
+        task.resume()
+    }
+
+    func cancel(with closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        task.cancel(with: closeCode, reason: reason)
+    }
+
+    func send(_ message: URLSessionWebSocketTask.Message) async throws {
+        try await task.send(message)
+    }
+
+    func receive(completionHandler: @escaping (Result<URLSessionWebSocketTask.Message, Error>) -> Void) {
+        task.receive(completionHandler: completionHandler)
+    }
+
+    func sendPing(completionHandler: @escaping (Error?) -> Void) {
+        task.sendPing(pongReceiveHandler: completionHandler)
+    }
+}
 
 public protocol WebSocketITEM: Hashable {
     var server: ServerInfo { get }
     var path: String { get }
     var pingInterval: TimeInterval { get }
+    var webSocketSession: WebSocketSessioning { get }
 
     var fullURL: URL? { get }
     func listen() -> AnyPublisher<WebSocketReceiveMessageModel, Never>
@@ -35,6 +76,8 @@ public protocol WebSocketITEM: Hashable {
 
 public extension WebSocketITEM {
     var pingInterval: TimeInterval { 10 }
+    var webSocketSession: WebSocketSessioning { URLSessionWebSocketSession.shared }
+
     var fullURL: URL? {
         URL(string: server.domain + path)
     }
@@ -57,46 +100,94 @@ public extension WebSocketITEM {
     }
 }
 
-// MARK: - 개별 연결 객체
-
 fileprivate final class WebSocketConnection {
     let url: URL
-    private var task: URLSessionWebSocketTask?
-    private var subject = PassthroughSubject<WebSocketReceiveMessageModel, Never>()
-    private var isConnected = false
-    private var pingInterval: TimeInterval
 
-    init(url: URL, pingInterval: TimeInterval) {
+    private let lock = NSLock()
+    private let pingInterval: TimeInterval
+    private let session: WebSocketSessioning
+    private var task: WebSocketTasking?
+    private let subject = PassthroughSubject<WebSocketReceiveMessageModel, Never>()
+    private var isConnected = false
+    private var subscriberCount = 0
+
+    init(url: URL, pingInterval: TimeInterval, session: WebSocketSessioning) {
         self.url = url
         self.pingInterval = pingInterval
+        self.session = session
     }
 
-    var publisher: AnyPublisher<WebSocketReceiveMessageModel, Never> {
-        subject
-            .handleEvents(receiveCancel: { [weak self] in
-                self?.handleCancel()
-            })
-            .eraseToAnyPublisher()
+    func publisher() -> AnyPublisher<WebSocketReceiveMessageModel, Never> {
+        Deferred { [weak self] () -> AnyPublisher<WebSocketReceiveMessageModel, Never> in
+            guard let self else {
+                return Empty().eraseToAnyPublisher()
+            }
+
+            self.addSubscriber()
+            self.connectIfNeeded()
+
+            return self.subject
+                .handleEvents(receiveCancel: { [weak self] in
+                    self?.removeSubscriber()
+                })
+                .eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
+    }
+
+    func send(_ message: WebSocketSendMessageModel) async throws {
+        connectIfNeeded()
+
+        guard let task = currentTask else {
+            throw FullyRESTfulError.invalidWebSocketState
+        }
+
+        let wsMessage: URLSessionWebSocketTask.Message
+        switch message {
+        case .text(let text):
+            wsMessage = .string(text)
+        case .binary(let data):
+            wsMessage = .data(data)
+        case .codable(let codable):
+            let jsonData = try JSONEncoder().encode(codable)
+            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+                throw FullyRESTfulError.stringResponseMismatch
+            }
+            wsMessage = .string(jsonString)
+        }
+
+        try await task.send(wsMessage)
     }
 
     func connectIfNeeded() {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard !isConnected else { return }
 
         let request = URLRequest(url: url)
-        task = URLSession.shared.webSocketTask(with: request)
-        task?.resume()
+        let task = session.webSocketTask(with: request)
+        self.task = task
         isConnected = true
-        listen()
-        ping()
+        task.resume()
+        listen(on: task)
+        ping(on: task)
     }
 
-    private func listen() {
-        task?.receive { [weak self] result in
+    private var currentTask: WebSocketTasking? {
+        lock.lock()
+        defer { lock.unlock() }
+        return task
+    }
+
+    private func listen(on task: WebSocketTasking) {
+        task.receive { [weak self] result in
             guard let self else { return }
 
             switch result {
             case .failure(let error):
-                print("❌ WebSocket 수신 실패: \(error)")
+                self.disconnect(notifyManager: true)
+                print("❌ WebSocket receive failed: \(error)")
             case .success(let message):
                 let model: WebSocketReceiveMessageModel
                 switch message {
@@ -107,56 +198,63 @@ fileprivate final class WebSocketConnection {
                 @unknown default:
                     return
                 }
-                subject.send(model)
-                self.listen()
-            }
-        }
-    }
 
-    private func ping() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + pingInterval) {
-            self.task?.sendPing { [weak self] error in
-                if error != nil {
-                    print("❌ WebSocket 핑 실패")
-                } else {
-                    self?.ping()
+                self.subject.send(model)
+                if self.currentTask != nil {
+                    self.listen(on: task)
                 }
             }
         }
     }
 
-    func send(_ message: WebSocketSendMessageModel) async throws {
-        guard let task = task else { return }
-        let wsMessage: URLSessionWebSocketTask.Message
+    private func ping(on task: WebSocketTasking) {
+        DispatchQueue.global().asyncAfter(deadline: .now() + pingInterval) { [weak self] in
+            guard let self else { return }
+            guard self.currentTask != nil else { return }
 
-        switch message {
-        case .text(let text):
-            wsMessage = .string(text)
-        case .binary(let data):
-            wsMessage = .data(data)
-        case .codable(let codable):
-            let jsonData = try JSONEncoder().encode(codable)
-            guard let jsonStr = String(data: jsonData, encoding: .utf8) else {
-                throw NSError(domain: "EncodeError", code: -1)
+            task.sendPing { [weak self] error in
+                guard let self else { return }
+                if let error {
+                    self.disconnect(notifyManager: true)
+                    print("❌ WebSocket ping failed: \(error)")
+                } else if self.currentTask != nil {
+                    self.ping(on: task)
+                }
             }
-            wsMessage = .string(jsonStr)
         }
-
-        try await task.send(wsMessage)
     }
 
-    private func handleCancel() {
-        print("🔴 모든 구독 해제됨 – WebSocket 연결 종료")
-        task?.cancel(with: .goingAway, reason: nil)
-        task = nil
-        isConnected = false
+    private func addSubscriber() {
+        lock.lock()
+        subscriberCount += 1
+        lock.unlock()
+    }
 
-        // 연결 해제 시 매니저에서 제거되도록 요청
-        WebSocketConnectionManager.shared.removeConnection(for: url)
+    private func removeSubscriber() {
+        lock.lock()
+        subscriberCount = max(subscriberCount - 1, 0)
+        let shouldDisconnect = subscriberCount == 0
+        lock.unlock()
+
+        if shouldDisconnect {
+            disconnect(notifyManager: true)
+        }
+    }
+
+    private func disconnect(notifyManager: Bool) {
+        lock.lock()
+        let task = self.task
+        self.task = nil
+        isConnected = false
+        lock.unlock()
+
+        task?.cancel(with: .goingAway, reason: nil)
+
+        if notifyManager {
+            WebSocketConnectionManager.shared.removeConnection(for: url)
+        }
     }
 }
-
-// MARK: - WebSocket 연결 매니저 (싱글톤)
 
 final class WebSocketConnectionManager {
     static let shared = WebSocketConnectionManager()
@@ -175,35 +273,44 @@ final class WebSocketConnectionManager {
         defer { lock.unlock() }
 
         if let connection = connections[url] {
-            connection.connectIfNeeded()
-            return connection.publisher
-        } else {
-            let connection = WebSocketConnection(url: url, pingInterval: item.pingInterval)
-            connections[url] = connection
-            connection.connectIfNeeded()
-            return connection.publisher
+            return connection.publisher()
         }
-    }
-    @MainActor
-    func send(_ message: WebSocketSendMessageModel, for item: any WebSocketITEM) async throws {
-        guard let url = item.fullURL else { return }
 
-        if let connection = connections[url] {
-            try await connection.send(message)
+        let connection = WebSocketConnection(url: url, pingInterval: item.pingInterval, session: item.webSocketSession)
+        connections[url] = connection
+        return connection.publisher()
+    }
+
+    func send(_ message: WebSocketSendMessageModel, for item: any WebSocketITEM) async throws {
+        guard let url = item.fullURL else {
+            throw FullyRESTfulError.invalidWebSocketState
         }
+
+        let connection = connection(for: url, pingInterval: item.pingInterval, session: item.webSocketSession)
+        try await connection.send(message)
     }
 
     func removeConnection(for url: URL) {
         lock.lock()
         defer { lock.unlock() }
-
         connections.removeValue(forKey: url)
+    }
+
+    private func connection(for url: URL, pingInterval: TimeInterval, session: WebSocketSessioning) -> WebSocketConnection {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if let existing = connections[url] {
+            return existing
+        }
+
+        let created = WebSocketConnection(url: url, pingInterval: pingInterval, session: session)
+        connections[url] = created
+        return created
     }
 }
 
 #if DEBUG
-// MARK: - 디버그용 연결 상태 확인
-
 public extension WebSocketITEM {
     func isDisconnected(_ item: any WebSocketITEM) -> Bool {
         WebSocketConnectionManager.shared.isDisconnected(self)

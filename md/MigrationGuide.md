@@ -1,20 +1,24 @@
-# 📦 FullyRESTful 3.0.0 Migration Guide
+# FullyRESTful Migration Guide
 
-This guide helps you migrate from version `2.x` to `3.0.0`, especially for **WebSocket** usage.
+This guide covers the practical migration points from older 2.x-style WebSocket usage to the current API.
 
----
+## What Changed
 
-## ❗ What's Changed?
+The main change is that WebSocket usage is now centered on `WebSocketITEM`.
 
-The WebSocket system has been **entirely restructured**:
-- Removed `WebSocketAPIITEM` and `TopicITEM`
-- Introduced a simpler protocol-based model: `WebSocketITEM`
-- New WebSocket lifecycle management using Combine publishers
-- Automatic connection sharing and lifecycle tracking via `WebSocketManager`
+Before:
+- topic-oriented API shape
+- extra wrapper concepts such as `makeTopic(...)`
+- custom send/listen flow per topic
 
----
+Now:
+- one `WebSocketITEM` per endpoint
+- `listen()` for incoming messages
+- `send(_:)` for outgoing messages
+- connection reuse managed internally
+- automatic disconnect when the last subscriber is cancelled
 
-## ✅ Before (v2.x Style)
+## Before
 
 ```swift
 class WebSocketEcho: WebSocketAPIITEM {
@@ -25,72 +29,78 @@ class WebSocketEcho: WebSocketAPIITEM {
 let topic = WebSocketEcho().makeTopic(name: "echo")
 
 topic.listen()
-    .sink(receiveValue: { message in print(message) })
+    .sink { message in
+        print(message)
+    }
     .store(in: &cancellables)
 
 try await topic.send(message: .text("Hello"))
 ```
 
----
-
-## ✅ After (v3.0.0+ Style)
+## After
 
 ```swift
 struct EchoSocket: WebSocketITEM {
-    var server = ServerInfo(domain: "wss://echo.websocket.org", defaultHeader: [:])
-    var path: String = ""
+    var server = ServerInfo(domain: "wss://example.com", defaultHeader: [:])
+    var path: String = "/echo"
 }
 
-let item = EchoSocket()
+let socket = EchoSocket()
 
-item.listen()
-    .sink { message in print(message) }
+socket.listen()
+    .sink { message in
+        print(message)
+    }
     .store(in: &cancellables)
 
-try await item.send(.text("Hello"))
+try await socket.send(.text("Hello"))
 ```
 
----
+## Migration Steps
 
-## 🔄 How to Migrate
+1. Replace `WebSocketAPIITEM` / `TopicITEM` usage with `WebSocketITEM`.
+2. Remove `makeTopic(...)` and any topic-specific routing layer.
+3. Subscribe with `listen()` directly from the socket item.
+4. Send with `send(_:)` directly from the socket item.
+5. If needed, override `pingInterval` per socket.
 
-1. **Replace** any `WebSocketAPIITEM` and `TopicITEM` usage with `WebSocketITEM`.
-2. **Use `listen()`** to subscribe to incoming messages.
-3. **Use `send(_:)`** to send messages directly from the item.
-4. Let **`WebSocketManager`** automatically handle:
-   - Connection reuse
-   - Auto disconnection when no subscribers remain
-   - Ping keepalive
+## Behavior Notes
 
----
-
-## 🧪 Unit Test Example (v3.0.0)
+- `send(_:)` now ensures the connection exists before sending.
+- Multiple subscribers on the same endpoint share one connection.
+- Cancelling the last subscriber disconnects the socket automatically.
+- Incoming messages are delivered as `WebSocketReceiveMessageModel`.
+- You can decode received JSON with the provided Combine helper:
 
 ```swift
-struct EchoSocket: WebSocketITEM {
-    var server = ServerInfo(domain: "wss://echo.websocket.org", defaultHeader: [:])
-    var path: String = ""
-}
-
-let item = EchoSocket()
-
-item.listen()
-    .sink { message in print(message) }
+socket.listen()
+    .decode(ChatMessage.self)
+    .sink(
+        receiveCompletion: { print($0) },
+        receiveValue: { print($0) }
+    )
     .store(in: &cancellables)
-
-try await item.send(.text("test"))
 ```
 
----
+## Testing
 
-## 🧼 Cleanups
+The current WebSocket layer supports mockable session/task injection.
 
-- All `makeTopic()`, `.send(to:)`, and `publishers[topicName]` references should be removed.
-- Instead, use the new `listen()` and `send()` provided by `WebSocketITEM`.
+If you need deterministic tests:
+- inject a custom `webSocketSession`
+- provide a mock task
+- assert `send`, incoming publish, and disconnect behavior without hitting a real server
 
----
+## Cleanup Checklist
 
-## 🤔 Need Help?
+- Remove old topic abstractions
+- Remove direct references to older WebSocket manager internals
+- Update examples to `listen()` / `send(_:)`
+- Replace external echo-server tests with mock-based tests
 
-Feel free to open an issue or pull request at  
-[https://github.com/southkin/FullyRESTful](https://github.com/southkin/FullyRESTful)
+## Release Note Summary
+
+For consumers, the migration message is simple:
+- REST usage stays mostly the same
+- WebSocket usage is flatter and endpoint-centric
+- testing is easier because the transport can be mocked

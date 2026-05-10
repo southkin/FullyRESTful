@@ -1,6 +1,19 @@
 # FullyRESTful
 ## ✨ What makes it different?
 
+Most networking libraries make you split one API across multiple places:
+- endpoint path
+- request model
+- response model
+- request-building logic
+
+FullyRESTful was built for the opposite approach:
+- one API
+- one Swift type
+- request and response defined together
+
+That means the shape your backend teammate sends you can stay almost 그대로 in code.
+
 This library lets you define APIs like this:
 
 ```swift
@@ -25,11 +38,11 @@ let responseModel = try JSONDecoder().decode(MyAPI.Response.self, from: data)
 
 ## 🤔 Why FullyRESTful?
 
-- You want a clean, Swift-native way to call APIs.
-- You hate writing boilerplate URLRequests.
-- You want WebSocket and REST in the same system.
-- You want your API layer to feel like SwiftUI.
-- You want it to *just work*.
+- You want each API to own its `Request` and `Response` together.
+- You do not want endpoint specs scattered across files.
+- You want to turn backend API guides into Swift types with minimal glue code.
+- You want REST and WebSocket to feel consistent.
+- You want a small abstraction over `URLSession`, not a giant framework.
 
 **FullyRESTful** is a Swift library supporting both **RESTful APIs** and **WebSocket** connections in a simple, declarative, and composable way.
 
@@ -41,8 +54,7 @@ let responseModel = try JSONDecoder().decode(MyAPI.Response.self, from: data)
 The internal WebSocket system has been completely restructured.  
 If you were using WebSocket features in version 2.x, please update your usage accordingly.
 
-<!-- Replace with actual link after adding migration guide -->
-[See Migration Guide →](#)
+[See Migration Guide →](md/MigrationGuide.md)
 
 ---
 
@@ -108,7 +120,80 @@ struct MyAPI: APIITEM {
 ```swift
 let data = try? await MyAPI().getData(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.23])).data
 
-let model = try? await MyAPI().request(param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.23])).model
+let model = try await MyAPI().request(
+    param: .init(param1: "example", param2: [1, 2, 3], param3: ["key": 1.23])
+).model
+```
+
+---
+
+## ✅ Empty Response
+
+For endpoints like `DELETE /resource/:id` that return `204 No Content`:
+
+```swift
+struct DeleteUserAPI: APIITEM {
+    var server = myServer
+
+    struct Request: Codable {}
+
+    var requestModel = Request.self
+    var responseModel = EmptyResponse.self
+    var method: HTTPMethod = .DELETE
+    var path: String = "/users/1"
+}
+
+let response = try await DeleteUserAPI().request(param: .init())
+print(response.rawResponse.statusCode)
+```
+
+---
+
+## 📝 Plain Text Response
+
+If the server returns `text/plain`, use `String` as the response model:
+
+```swift
+struct HealthCheckAPI: APIITEM {
+    var server = myServer
+
+    struct Request: Codable {}
+
+    var requestModel = Request.self
+    var responseModel = String.self
+    var method: HTTPMethod = .GET
+    var path: String = "/health"
+}
+
+let text = try await HealthCheckAPI().request(param: .init()).model
+```
+
+---
+
+## 🎯 Custom Decoder
+
+If the backend needs custom date decoding or key strategies:
+
+```swift
+struct EventAPI: APIITEM {
+    var server = myServer
+
+    struct Request: Codable {}
+    struct Response: Codable {
+        let createdAt: Date
+    }
+
+    var requestModel = Request.self
+    var responseModel = Response.self
+    var method: HTTPMethod = .GET
+    var path: String = "/event"
+
+    var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+}
 ```
 
 ---
@@ -203,7 +288,7 @@ struct EchoSocket: WebSocketITEM {
 let socket = EchoSocket()
 socket.listen()
     .sink { message in
-        print("📥", message ?? "nil")
+        print("📥", message)
     }
     .store(in: &cancellables)
 ```
@@ -227,13 +312,7 @@ try await socket.send(.codable(message))
 ### Decode Received Messages
 ```swift
 socket.listen()
-    .compactMap {
-        guard case let .text(text) = $0,
-              let data = text.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode(ChatMessage.self, from: data)
-        else { return nil }
-        return decoded
-    }
+    .decode(ChatMessage.self)
     .sink { decoded in
         print("📩 Decoded:", decoded)
     }
@@ -249,6 +328,45 @@ Enable cURL log output for debugging:
 ```swift
 struct MyAPI: APIITEM {
     var curlLog = true
+}
+```
+
+You can also inject a custom `URLSession` for tests or controlled environments:
+
+```swift
+struct MyAPI: APIITEM {
+    var server = myServer
+    var session: URLSession = .shared
+}
+```
+
+---
+
+## ⚠️ Error Handling
+
+`FullyRESTful` throws `FullyRESTfulError` for the common transport and decoding cases.
+
+Typical cases:
+- `badURL`: invalid `server.domain + path`
+- `httpError(statusCode:data:)`: non-success HTTP response with raw body preserved
+- `emptyResponseBody`: body was empty but your `ResponseModel` could not decode from it
+- `unsupportedContentType`: response was not JSON or text
+- `invalidWebSocketState`: send attempted before a valid socket state existed
+
+Example:
+
+```swift
+do {
+    let response = try await MyAPI().request(param: .init(...))
+    print(response.model)
+} catch let error as FullyRESTfulError {
+    switch error {
+    case .httpError(let statusCode, let data):
+        print("status:", statusCode)
+        print("body:", String(data: data, encoding: .utf8) ?? "")
+    default:
+        print(error.localizedDescription)
+    }
 }
 ```
 

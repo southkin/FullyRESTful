@@ -1,12 +1,13 @@
+import Foundation
 import KinKit
 
-public protocol MultipartUpload {
-}
+public protocol MultipartUpload {}
 
 public struct MultipartItem: Codable {
     public var data: Data
     public var mimeType: String
     public var fileName: String
+
     public init(data: Data, mimeType: String, fileName: String) {
         self.data = data
         self.mimeType = mimeType
@@ -29,6 +30,7 @@ public enum HTTPMethod: String, CaseIterable {
 public enum ParameterEncode {
     case JSONEncode
     case URLEncode
+
     func encoding(param: Encodable) throws -> Data {
         switch self {
         case .JSONEncode:
@@ -37,12 +39,52 @@ public enum ParameterEncode {
             if let data = param.dict?.queryString.data(using: .utf8) {
                 return data
             }
-            throw NSError(domain: "ParameterEncode", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode parameters"])
+            throw FullyRESTfulError.parameterEncodingFailed
         }
     }
 }
 
+public enum FullyRESTfulError: LocalizedError {
+    case badURL(String)
+    case invalidResponse
+    case parameterEncodingFailed
+    case retriesExceeded(Int)
+    case httpError(statusCode: Int, data: Data)
+    case unsupportedContentType(String?)
+    case emptyResponseBody
+    case stringResponseMismatch
+    case requestBodyEncodingFailed(String)
+    case invalidWebSocketState
 
+    public var errorDescription: String? {
+        switch self {
+        case .badURL(let urlString):
+            return "Invalid URL: \(urlString)"
+        case .invalidResponse:
+            return "Invalid server response"
+        case .parameterEncodingFailed:
+            return "Failed to encode request parameters"
+        case .retriesExceeded(let count):
+            return "Maximum retry attempts exceeded: \(count)"
+        case .httpError(let statusCode, _):
+            return "Server returned status code \(statusCode)"
+        case .unsupportedContentType(let contentType):
+            return "Unsupported Content-Type: \(contentType ?? "unknown")"
+        case .emptyResponseBody:
+            return "Response body is empty"
+        case .stringResponseMismatch:
+            return "ResponseModel is not compatible with string response"
+        case .requestBodyEncodingFailed(let key):
+            return "Failed to encode multipart parameter \(key)"
+        case .invalidWebSocketState:
+            return "WebSocket connection is not ready"
+        }
+    }
+}
+
+public struct EmptyResponse: Codable {
+    public init() {}
+}
 
 public protocol APIITEM_BASE {
     var method: HTTPMethod { get }
@@ -53,142 +95,177 @@ public protocol APIITEM_BASE {
     var paramEncoder: ParameterEncode { get }
     var strEncoder: String.Encoding { get }
     var curlLog: Bool { get }
+    var session: URLSession { get }
+    var retryLimit: Int { get }
+    var decoder: JSONDecoder { get }
 }
+
 public extension APIITEM_BASE {
     var header: [String: String] {
         if let custom = customHeader {
             return server.defaultHeader.merging(custom) { _, new in new }
-        } else {
-            return server.defaultHeader
         }
+        return server.defaultHeader
     }
+
     var defaultStatusCodeValid: ServerInfo.StatusCodeValid {
-        return { statusCode in
-            return (200...299).contains(statusCode) ? .success : .throwError
+        { statusCode in
+            (200...299).contains(statusCode) ? .success : .throwError
         }
     }
+
     var statusCodeValid: ServerInfo.StatusCodeValid {
-        self.server.statusCodeValid ?? defaultStatusCodeValid
+        server.statusCodeValid ?? defaultStatusCodeValid
     }
-    var paramEncoder: ParameterEncode {
-        .JSONEncode
-    }
-    var strEncoder: String.Encoding {
-        .utf8
-    }
-    var curlLog: Bool {
-        false
-    }
+
+    var paramEncoder: ParameterEncode { .JSONEncode }
+    var strEncoder: String.Encoding { .utf8 }
+    var curlLog: Bool { false }
+    var session: URLSession { .shared }
+    var retryLimit: Int { 3 }
+    var decoder: JSONDecoder { JSONDecoder() }
 }
 
 public struct DataResponse {
     public let data: Data
     public let rawResponse: HTTPURLResponse
 }
+
 public struct APIResponse<T: Decodable> {
     public let model: T?
     public let rawResponse: HTTPURLResponse
 }
+
 public protocol APIITEM: APIITEM_BASE {
     associatedtype ResponseModel: Decodable
     associatedtype RequestModel: Encodable
+
     var responseModel: ResponseModel.Type { get }
     var requestModel: RequestModel.Type { get }
 }
 
-extension APIITEM {
-    public func getData(param: RequestModel) async throws -> DataResponse? {
-        guard var url = URL(string: "\(server.domain)\(path)") else {
-            throw URLError(.badURL)
-        }
-        if [HTTPMethod.GET].contains(method), let dict = param.dict {
-            guard var urlComponents = URLComponents(string: "\(server.domain)\(path)") else {
-                throw URLError(.badURL)
-            }
-            urlComponents.queryItems = dict.map { URLQueryItem(name: $0.key, value: "\($0.value)") }
-            url = urlComponents.url ?? url
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = method.rawValue
-        
-        if self is MultipartUpload {
-            let boundary = generateBoundary()
-            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            
-            let parameters = param.allProperties.reduce(into: [String: Encodable]()) { result, pair in
-                result[pair.0] = pair.1
-            }
-            request.httpBody = try createMultipartBody(boundary: boundary, parameters: parameters)
-        } else {
-            for (key, value) in header {
-                request.setValue(value, forHTTPHeaderField: key)
-            }
-            if ![HTTPMethod.GET].contains(method) {
-                request.httpBody = try paramEncoder.encoding(param: param)
-            }
-        }
-        
+public extension APIITEM {
+    func getData(param: RequestModel) async throws -> DataResponse {
+        let request = try makeURLRequest(param: param)
+
         if curlLog {
             print(request.curlString)
         }
-        
+
         var retries = 0
-        let maxRetries = 3
-        while retries <= maxRetries {
-            let (data, response) = try await URLSession.shared.getData(for: request)
+        while true {
+            let (data, response) = try await session.getData(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw URLError(.badServerResponse)
+                throw FullyRESTfulError.invalidResponse
             }
-            switch self.statusCodeValid(httpResponse.statusCode) {
+
+            switch statusCodeValid(httpResponse.statusCode) {
             case .success:
                 return .init(data: data, rawResponse: httpResponse)
             case .retry:
                 retries += 1
-                continue
+                guard retries <= retryLimit else {
+                    throw FullyRESTfulError.retriesExceeded(retryLimit)
+                }
             case .throwError:
-                let error = NSError(domain: "ServerError", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned status code \(httpResponse.statusCode)"])
-                throw error
+                throw FullyRESTfulError.httpError(statusCode: httpResponse.statusCode, data: data)
             }
         }
-        throw NSError(domain: "RetriesExceeded", code: -1, userInfo: [NSLocalizedDescriptionKey: "Maximum retry attempts exceeded"])
     }
-    
-    public func request(param: RequestModel) async throws -> APIResponse<ResponseModel>? {
-        guard let dataInfo = try await getData(param: param),
-              let contentType = dataInfo.rawResponse.allHeaderFields["Content-Type"] as? String
-        else { return nil }
-        
-        let response = dataInfo.rawResponse
-        let data = dataInfo.data
-        
-        if contentType.contains("application/json") {
+
+    func request(param: RequestModel) async throws -> APIResponse<ResponseModel> {
+        let dataInfo = try await getData(param: param)
+        let model = try decodeResponse(dataInfo.data, response: dataInfo.rawResponse)
+        return .init(model: model, rawResponse: dataInfo.rawResponse)
+    }
+
+    private func makeURLRequest(param: RequestModel) throws -> URLRequest {
+        let urlString = "\(server.domain)\(path)"
+        guard var url = URL(string: urlString) else {
+            throw FullyRESTfulError.badURL(urlString)
+        }
+
+        if method == .GET, let dict = param.dict {
+            guard var components = URLComponents(string: urlString) else {
+                throw FullyRESTfulError.badURL(urlString)
+            }
+            components.queryItems = dict.map { URLQueryItem(name: $0.key, value: "\($0.value)") }
+            guard let builtURL = components.url else {
+                throw FullyRESTfulError.badURL(urlString)
+            }
+            url = builtURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+
+        for (key, value) in header {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        if self is MultipartUpload {
+            let boundary = generateBoundary()
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            let parameters = Dictionary(uniqueKeysWithValues: param.allProperties.compactMap { key, value in
+                value.map { (key, $0) }
+            })
+            request.httpBody = try createMultipartBody(boundary: boundary, parameters: parameters)
+            return request
+        }
+
+        if method != .GET {
+            request.httpBody = try paramEncoder.encoding(param: param)
+        }
+
+        return request
+    }
+
+    private func decodeResponse(_ data: Data, response: HTTPURLResponse) throws -> ResponseModel? {
+        if data.isEmpty {
+            return try decodeEmptyResponse()
+        }
+
+        let contentType = response.value(forHTTPHeaderField: "Content-Type")?.lowercased()
+
+        if contentType?.contains("application/json") == true || contentType == nil {
             do {
-                let decoded = try JSONDecoder().decode(ResponseModel.self, from: data)
-                return .init(model: decoded, rawResponse: response)
+                return try decoder.decode(ResponseModel.self, from: data)
             } catch {
-                print("❌ JSON 디코딩 실패: \(error)")
+                print("❌ JSON decode failed: \(error)")
                 print("📦 Raw Data: \(String(data: data, encoding: .utf8) ?? "N/A")")
                 throw error
             }
-        } else if contentType.contains("text/plain") {
-            if let text = String(data: data, encoding: .utf8) as? ResponseModel {
-                return .init(model: text, rawResponse: response)
-            } else {
-                print("❌ Plain text 디코딩 실패")
-                print("📦 Raw Data: \(String(data: data, encoding: .utf8) ?? "N/A")")
-                return nil
-            }
-        } else {
-            print("⚠️ 지원되지 않는 Content-Type: \(contentType)")
-            print("📦 Raw Data: \(String(data: data, encoding: .utf8) ?? "N/A")")
-            return nil
         }
+
+        if contentType?.contains("text/plain") == true || contentType?.contains("text/") == true {
+            guard ResponseModel.self == String.self else {
+                throw FullyRESTfulError.stringResponseMismatch
+            }
+            guard let text = String(data: data, encoding: strEncoder) else {
+                throw FullyRESTfulError.stringResponseMismatch
+            }
+            return text as? ResponseModel
+        }
+
+        throw FullyRESTfulError.unsupportedContentType(contentType)
+    }
+
+    private func decodeEmptyResponse() throws -> ResponseModel? {
+        if ResponseModel.self == EmptyResponse.self {
+            return EmptyResponse() as? ResponseModel
+        }
+
+        if let decoded = try? decoder.decode(ResponseModel.self, from: Data("{}".utf8)) {
+            return decoded
+        }
+
+        throw FullyRESTfulError.emptyResponseBody
     }
 }
 
 func createMultipartBody(boundary: String, parameters: [String: Encodable]) throws -> Data {
     var body = Data()
-    
+
     for (key, value) in parameters {
         body.append("--\(boundary)\r\n")
         switch value {
@@ -211,33 +288,28 @@ func createMultipartBody(boundary: String, parameters: [String: Encodable]) thro
             body.append("\r\n")
         default:
             let jsonData = try JSONEncoder().encode(value)
-            if let jsonString = String(data: jsonData, encoding: .utf8) {
-                body.append("Content-Disposition: form-data; name=\"\(key)\"\r\n")
-                body.append("Content-Type: application/json\r\n\r\n")
-                body.append(jsonString)
-                body.append("\r\n")
-            } else {
-                throw NSError(domain: "MultipartBody", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode parameter \(key)"])
+            guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+                throw FullyRESTfulError.requestBodyEncodingFailed(key)
             }
+            body.append("Content-Disposition: form-data; name=\"\(key)\"\r\n")
+            body.append("Content-Type: application/json\r\n\r\n")
+            body.append(jsonString)
+            body.append("\r\n")
         }
     }
+
     body.append("--\(boundary)--\r\n")
     return body
 }
 
 func generateBoundary() -> String {
-    return "Boundary-\(UUID().uuidString)"
+    "Boundary-\(UUID().uuidString)"
 }
 
 extension Data {
     mutating func append(_ string: String, using encoding: String.Encoding = .utf8) {
         if let data = string.data(using: encoding) {
             append(data)
-        } else {
-            print("Failed to encode string: \(string)")
         }
     }
 }
-
-
-
